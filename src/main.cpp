@@ -2,7 +2,6 @@
 #include <iostream>
 #include <string>
 #include <limits>
-#include <filesystem>
 #include "sqlite3.h"
 
 using namespace std;
@@ -36,6 +35,7 @@ bool createStudent(sqlite3* db) {
     sqlite3_bind_text(stmt, 3, email.c_str(), -1, SQLITE_TRANSIENT);
 
     int result = sqlite3_step(stmt);
+
     if (result == SQLITE_DONE) {
         cout << "Student record created successfully.\n";
     } else if (result == SQLITE_CONSTRAINT ||
@@ -50,10 +50,74 @@ bool createStudent(sqlite3* db) {
     return result == SQLITE_DONE;
 }
 
-int main() {
-    filesystem::create_directories("data");
+void viewStudents(sqlite3* db) {
+    const char* sql =
+        "SELECT student_id, name, email FROM students ORDER BY student_id;";
 
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        cout << "Database error: " << sqlite3_errmsg(db) << '\n';
+        return;
+    }
+
+    cout << "\n--- Student Records ---\n";
+    bool found = false;
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        found = true;
+        auto textColumn = [&](int column) -> const char* {
+            const unsigned char* value = sqlite3_column_text(stmt, column);
+            return value ? reinterpret_cast<const char*>(value) : "";
+        };
+
+        cout << "ID: " << textColumn(0)
+             << " | Name: " << textColumn(1)
+             << " | Email: " << textColumn(2) << '\n';
+    }
+
+    if (!found) {
+        cout << "No student records found.\n";
+    }
+
+    sqlite3_finalize(stmt);
+}
+
+void searchStudent(sqlite3* db) {
+    string id;
+    cout << "\nEnter student ID to search: ";
+    getline(cin, id);
+
+    const char* sql =
+        "SELECT student_id, name, email FROM students WHERE student_id = ?;";
+
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        cout << "Database error: " << sqlite3_errmsg(db) << '\n';
+        return;
+    }
+
+    sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        auto textColumn = [&](int column) -> const char* {
+            const unsigned char* value = sqlite3_column_text(stmt, column);
+            return value ? reinterpret_cast<const char*>(value) : "";
+        };
+
+        cout << "\nStudent found:\n"
+             << "ID: " << textColumn(0) << '\n'
+             << "Name: " << textColumn(1) << '\n'
+             << "Email: " << textColumn(2) << '\n';
+    } else {
+        cout << "No student found with ID: " << id << '\n';
+    }
+
+    sqlite3_finalize(stmt);
+}
+
+int main() {
     sqlite3* db = nullptr;
+
     if (sqlite3_open("data/student_records.db", &db) != SQLITE_OK) {
         cerr << "Cannot open database: "
              << (db ? sqlite3_errmsg(db) : "allocation failed") << '\n';
@@ -77,13 +141,14 @@ int main() {
         return 1;
     }
 
-    cout << "=== Student Record System ===\n";
-
     int choice;
     do {
-        cout << "\n1. Create student record\n";
-        cout << "0. Exit\n";
-        cout << "Choose: ";
+        cout << "\n=== Student Record System ===\n"
+             << "1. Create student record\n"
+             << "2. View all students\n"
+             << "3. Search student by ID\n"
+             << "0. Exit\n"
+             << "Choose: ";
 
         if (!(cin >> choice)) {
             cin.clear();
@@ -91,16 +156,18 @@ int main() {
             cout << "Please enter a valid number.\n";
             continue;
         }
+
         cin.ignore(numeric_limits<streamsize>::max(), '\n');
 
-        if (choice == 1) {
-            createStudent(db);
-        } else if (choice != 0) {
-            cout << "Invalid option.\n";
+        switch (choice) {
+            case 1: createStudent(db); break;
+            case 2: viewStudents(db); break;
+            case 3: searchStudent(db); break;
+            case 0: cout << "Application closed.\n"; break;
+            default: cout << "Invalid option.\n";
         }
     } while (choice != 0);
 
     sqlite3_close(db);
-    cout << "Application closed.\n";
     return 0;
 }
