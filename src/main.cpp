@@ -6,6 +6,8 @@
 
 using namespace std;
 
+
+
 bool createStudent(sqlite3* db) {
     string id, name, email;
 
@@ -114,6 +116,99 @@ void searchStudent(sqlite3* db) {
 
     sqlite3_finalize(stmt);
 }
+
+// Delete student record — admin/teacher only
+bool deleteStudent(sqlite3* db, const std::string& role) {
+    if (role != "admin" && role != "teacher") {
+        std::cout << "Access denied: only admins and teachers can delete records.\n";
+        return false;
+    }
+
+    std::cout << "\nEnter student ID to delete: ";
+    std::string id;
+    std::getline(std::cin, id);
+    id = trimCopy(id);
+
+    if (id.empty()) {
+        std::cout << "Error: student ID is required.\n";
+        return false;
+    }
+
+    sqlite3_stmt* fetch = nullptr;
+    if (sqlite3_prepare_v2(db,
+            "SELECT name, email FROM students WHERE student_id = ?;",
+            -1, &fetch, nullptr) != SQLITE_OK) {
+        std::cout << "Database error: " << sqlite3_errmsg(db) << '\n';
+        return false;
+    }
+    sqlite3_bind_text(fetch, 1, id.c_str(), -1, SQLITE_TRANSIENT);
+
+    std::string curName, curEmail;
+    if (sqlite3_step(fetch) == SQLITE_ROW) {
+        curName  = reinterpret_cast<const char*>(sqlite3_column_text(fetch, 0));
+        const unsigned char* em = sqlite3_column_text(fetch, 1);
+        curEmail = em ? reinterpret_cast<const char*>(em) : "";
+    } else {
+        sqlite3_finalize(fetch);
+        std::cout << "Error: no student found with ID '" << id << "'.\n";
+        return false;
+    }
+    sqlite3_finalize(fetch);
+
+    std::cout << "\nAbout to delete this record:\n"
+              << "  ID   : " << id       << "\n"
+              << "  Name : " << curName  << "\n"
+              << "  Email: " << curEmail << "\n"
+              << "\nRelated grades and attendance will also be removed.\n"
+              << "Type 'yes' to confirm, anything else to cancel: ";
+
+    std::string confirm;
+    std::getline(std::cin, confirm);
+    confirm = trimCopy(confirm);
+
+    if (confirm != "yes") {
+        std::cout << "Deletion cancelled. Record was not removed.\n";
+        return false;
+    }
+
+    sqlite3_exec(db, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
+
+    sqlite3_stmt* del = nullptr;
+    if (sqlite3_prepare_v2(db,
+            "DELETE FROM students WHERE student_id = ?;",
+            -1, &del, nullptr) != SQLITE_OK) {
+        sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+        std::cout << "Database error: " << sqlite3_errmsg(db) << '\n';
+        return false;
+    }
+    sqlite3_bind_text(del, 1, id.c_str(), -1, SQLITE_TRANSIENT);
+
+    int rc = sqlite3_step(del);
+    sqlite3_finalize(del);
+
+    if (rc != SQLITE_DONE) {
+        sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+        std::cout << "Database error while deleting: "
+                  << sqlite3_errmsg(db) << '\n';
+        return false;
+    }
+
+    if (sqlite3_changes(db) == 0) {
+        sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+        std::cout << "Error: record was not deleted (it may have been "
+                     "removed already).\n";
+        return false;
+    }
+
+    sqlite3_exec(db, "COMMIT;", nullptr, nullptr, nullptr);
+
+    std::cout << "\nStudent record deleted successfully.\n"
+              << "  Removed ID   : " << id       << "\n"
+              << "  Removed Name : " << curName  << "\n"
+              << "  Removed Email: " << curEmail << "\n";
+    return true;
+}
+
 
 int main() {
     sqlite3* db = nullptr;
