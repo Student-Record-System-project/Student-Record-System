@@ -6,7 +6,14 @@
 
 using namespace std;
 
-
+std::string role = "admin";   // replace with acutal when auth is implemeted
+                              
+static std::string trimCopy(const std::string& s) {
+    size_t a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) return "";
+    size_t b = s.find_last_not_of(" \t\r\n");
+    return s.substr(a, b - a + 1);
+}
 
 bool createStudent(sqlite3* db) {
     string id, name, email;
@@ -118,6 +125,7 @@ void searchStudent(sqlite3* db) {
 }
 
 // Delete student record — admin/teacher only
+
 bool deleteStudent(sqlite3* db, const std::string& role) {
     if (role != "admin" && role != "teacher") {
         std::cout << "Access denied: only admins and teachers can delete records.\n";
@@ -242,6 +250,7 @@ int main() {
              << "1. Create student record\n"
              << "2. View all students\n"
              << "3. Search student by ID\n"
+             << "5. Delete record\n"
              << "0. Exit\n"
              << "Choose: ";
 
@@ -258,11 +267,10 @@ int main() {
             case 1: createStudent(db); break;
             case 2: viewStudents(db); break;
             case 3: searchStudent(db); break;
+            case 5: deleteStudent(db, role); break;
             case 0: cout << "Application closed.\n"; break;
             default: cout << "Invalid option.\n";
         }
     } while (choice != 0);
 
-    sqlite3_close(db);
-    return 0;
 }
