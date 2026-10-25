@@ -33,7 +33,7 @@ bool validName(const string& name) {
 }
 
 bool validEmail(const string& email) {
-    if (email.empty()) return true; // Existing schema permits optional email.
+    if (email.empty()) return true;
     if (email.size() > 254 || email.find(' ') != string::npos) return false;
     size_t at = email.find('@');
     if (at == string::npos || at == 0 || at != email.rfind('@')) return false;
@@ -184,15 +184,15 @@ void searchStudent(sqlite3* db) {
     sqlite3_finalize(stmt);
 }
 
-// role: "admin" or "teacher" are allowed; anything else is rejected.
+// ============================================================
+// Update student record — admin/teacher only
+// ============================================================
 bool updateStudent(sqlite3* db, const std::string& role) {
-    // ---- 1. Permission ----
     if (role != "admin" && role != "teacher") {
         std::cout << "Access denied: only admins and teachers can update records.\n";
         return false;
     }
 
-    // ---- 2. Pick record ----
     std::cout << "\nEnter student ID to update: ";
     std::string oldId;
     std::getline(std::cin, oldId);
@@ -203,7 +203,6 @@ bool updateStudent(sqlite3* db, const std::string& role) {
         return false;
     }
 
-    // ---- 3. Load current values ----
     sqlite3_stmt* fetch = nullptr;
     if (sqlite3_prepare_v2(db,
             "SELECT name, email FROM students WHERE student_id = ?;",
@@ -225,7 +224,6 @@ bool updateStudent(sqlite3* db, const std::string& role) {
     }
     sqlite3_finalize(fetch);
 
-    // ---- 4. Ask for new values (Enter = keep current) ----
     std::cout << "\nCurrent record:\n"
               << "  Name : " << curName  << "\n"
               << "  Email: " << curEmail << "\n"
@@ -243,7 +241,6 @@ bool updateStudent(sqlite3* db, const std::string& role) {
     newEmail = trim(newEmail);
     if (newEmail.empty()) newEmail = curEmail;
 
-    // ---- 5. Validate ----
     if (!validName(newName)) {
         std::cout << "Error: name is required and must be 1-100 characters. Update rejected.\n";
         return false;
@@ -253,7 +250,6 @@ bool updateStudent(sqlite3* db, const std::string& role) {
         return false;
     }
 
-    // ---- 6. Save ----
     sqlite3_stmt* upd = nullptr;
     if (sqlite3_prepare_v2(db,
             "UPDATE students SET name = ?, email = ? WHERE student_id = ?;",
@@ -280,6 +276,100 @@ bool updateStudent(sqlite3* db, const std::string& role) {
     return true;
 }
 
+// ============================================================
+// Delete student record — admin/teacher only
+// ============================================================
+bool deleteStudent(sqlite3* db, const std::string& role) {
+    if (role != "admin" && role != "teacher") {
+        std::cout << "Access denied: only admins and teachers can delete records.\n";
+        return false;
+    }
+
+    std::cout << "\nEnter student ID to delete: ";
+    std::string id;
+    std::getline(std::cin, id);
+    id = trim(id);
+
+    if (id.empty()) {
+        std::cout << "Error: student ID is required.\n";
+        return false;
+    }
+
+    sqlite3_stmt* fetch = nullptr;
+    if (sqlite3_prepare_v2(db,
+            "SELECT name, email FROM students WHERE student_id = ?;",
+            -1, &fetch, nullptr) != SQLITE_OK) {
+        std::cout << "Database error: " << sqlite3_errmsg(db) << '\n';
+        return false;
+    }
+    sqlite3_bind_text(fetch, 1, id.c_str(), -1, SQLITE_TRANSIENT);
+
+    std::string curName, curEmail;
+    if (sqlite3_step(fetch) == SQLITE_ROW) {
+        curName  = reinterpret_cast<const char*>(sqlite3_column_text(fetch, 0));
+        const unsigned char* em = sqlite3_column_text(fetch, 1);
+        curEmail = em ? reinterpret_cast<const char*>(em) : "";
+    } else {
+        sqlite3_finalize(fetch);
+        std::cout << "Error: no student found with ID '" << id << "'.\n";
+        return false;
+    }
+    sqlite3_finalize(fetch);
+
+    std::cout << "\nAbout to delete this record:\n"
+              << "  ID   : " << id       << "\n"
+              << "  Name : " << curName  << "\n"
+              << "  Email: " << curEmail << "\n"
+              << "\nRelated grades and attendance will also be removed.\n"
+              << "Type 'yes' to confirm, anything else to cancel: ";
+
+    std::string confirm;
+    std::getline(std::cin, confirm);
+    confirm = trim(confirm);
+
+    if (confirm != "yes") {
+        std::cout << "Deletion cancelled. Record was not removed.\n";
+        return false;
+    }
+
+    sqlite3_exec(db, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
+
+    sqlite3_stmt* del = nullptr;
+    if (sqlite3_prepare_v2(db,
+            "DELETE FROM students WHERE student_id = ?;",
+            -1, &del, nullptr) != SQLITE_OK) {
+        sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+        std::cout << "Database error: " << sqlite3_errmsg(db) << '\n';
+        return false;
+    }
+    sqlite3_bind_text(del, 1, id.c_str(), -1, SQLITE_TRANSIENT);
+
+    int rc = sqlite3_step(del);
+    sqlite3_finalize(del);
+
+    if (rc != SQLITE_DONE) {
+        sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+        std::cout << "Database error while deleting: "
+                  << sqlite3_errmsg(db) << '\n';
+        return false;
+    }
+
+    if (sqlite3_changes(db) == 0) {
+        sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
+        std::cout << "Error: record was not deleted (it may have been "
+                     "removed already).\n";
+        return false;
+    }
+
+    sqlite3_exec(db, "COMMIT;", nullptr, nullptr, nullptr);
+
+    std::cout << "\nStudent record deleted successfully.\n"
+              << "  Removed ID   : " << id       << "\n"
+              << "  Removed Name : " << curName  << "\n"
+              << "  Removed Email: " << curEmail << "\n";
+    return true;
+}
+
 int main() {
     sqlite3* db = nullptr;
 
@@ -289,6 +379,8 @@ int main() {
         if (db) sqlite3_close(db);
         return 1;
     }
+
+    sqlite3_exec(db, "PRAGMA foreign_keys = ON;", nullptr, nullptr, nullptr);
 
     const char* createTable =
         "CREATE TABLE IF NOT EXISTS students ("
@@ -313,6 +405,7 @@ int main() {
              << "2. View all students\n"
              << "3. Search student by ID\n"
              << "4. Update record\n"
+             << "5. Delete record\n"
              << "0. Exit\n"
              << "Choose: ";
 
@@ -331,6 +424,7 @@ int main() {
             case 2: viewStudents(db); break;
             case 3: searchStudent(db); break;
             case 4: updateStudent(db, role); break;
+            case 5: deleteStudent(db, role); break;
             case 0: cout << "Application closed.\n"; break;
             default: cout << "Invalid option.\n";
         }

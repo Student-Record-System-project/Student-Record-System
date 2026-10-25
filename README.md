@@ -77,6 +77,7 @@ When you start the program, you'll see a menu:
 2. View all students
 3. Search student by ID
 4. Update record
+5. Delete record
 0. Exit
 Choose:
 ```
@@ -85,6 +86,7 @@ Choose:
 - **2** — list every student currently in the database.
 - **3** — look up a single student by ID.
 - **4** — update a student.
+- **5** — delete a student. You must type `yes` to confirm.
 - **0** — exit the program.
 
 The database is saved to disk, so records remain available on the next run.
