@@ -1,13 +1,51 @@
-
 #include <iostream>
 #include <string>
 #include <limits>
-#include "sqlite3.h"
 #include <cctype>
+#include "sqlite3.h"
 
 using namespace std;
 
-std::string role = "admin";   // replace with acutal when auth is implemeted
+std::string role = "admin";   // replace with actual when auth is implemented
+
+// Shared validation helpers. Keep these independent of the SQLite schema.
+string trim(const string& value) {
+    size_t first = value.find_first_not_of(" \t\r\n");
+    if (first == string::npos) return "";
+    size_t last = value.find_last_not_of(" \t\r\n");
+    return value.substr(first, last - first + 1);
+}
+
+bool validStudentId(const string& id) {
+    if (id.empty() || id.size() > 50) return false;
+    for (unsigned char c : id) {
+        if (!isalnum(c) && c != '-' && c != '_') return false;
+    }
+    return true;
+}
+
+bool validName(const string& name) {
+    if (name.empty() || name.size() > 100) return false;
+    for (unsigned char c : name) {
+        if (iscntrl(c)) return false;
+    }
+    return true;
+}
+
+bool validEmail(const string& email) {
+    if (email.empty()) return true; // Existing schema permits optional email.
+    if (email.size() > 254 || email.find(' ') != string::npos) return false;
+    size_t at = email.find('@');
+    if (at == string::npos || at == 0 || at != email.rfind('@')) return false;
+    size_t dot = email.find('.', at + 2);
+    return dot != string::npos && dot > at + 1 && dot + 1 < email.size();
+}
+
+bool bindText(sqlite3* db, sqlite3_stmt* stmt, int index, const string& value) {
+    int rc = sqlite3_bind_text(stmt, index, value.c_str(), -1, SQLITE_TRANSIENT);
+    if (rc != SQLITE_OK) cerr << "Database bind error: " << sqlite3_errmsg(db) << '\n';
+    return rc == SQLITE_OK;
+}
 
 bool createStudent(sqlite3* db) {
     string id, name, email;
@@ -19,8 +57,19 @@ bool createStudent(sqlite3* db) {
     cout << "Email: ";
     getline(cin, email);
 
-    if (id.empty() || name.empty()) {
-        cout << "Error: Student ID and name are required.\n";
+    id = trim(id);
+    name = trim(name);
+    email = trim(email);
+    if (!validStudentId(id)) {
+        cout << "Error: Student ID must be 1-50 letters, digits, hyphens or underscores.\n";
+        return false;
+    }
+    if (!validName(name)) {
+        cout << "Error: Name must be 1-100 characters without control characters.\n";
+        return false;
+    }
+    if (!validEmail(email)) {
+        cout << "Error: Enter a valid email address or leave it blank.\n";
         return false;
     }
 
@@ -33,9 +82,12 @@ bool createStudent(sqlite3* db) {
         return false;
     }
 
-    sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, name.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 3, email.c_str(), -1, SQLITE_TRANSIENT);
+    if (!bindText(db, stmt, 1, id) ||
+        !bindText(db, stmt, 2, name) ||
+        !bindText(db, stmt, 3, email)) {
+        sqlite3_finalize(stmt);
+        return false;
+    }
 
     int result = sqlite3_step(stmt);
 
@@ -66,7 +118,8 @@ void viewStudents(sqlite3* db) {
     cout << "\n--- Student Records ---\n";
     bool found = false;
 
-    while (sqlite3_step(stmt) == SQLITE_ROW) {
+    int result;
+    while ((result = sqlite3_step(stmt)) == SQLITE_ROW) {
         found = true;
         auto textColumn = [&](int column) -> const char* {
             const unsigned char* value = sqlite3_column_text(stmt, column);
@@ -78,7 +131,9 @@ void viewStudents(sqlite3* db) {
              << " | Email: " << textColumn(2) << '\n';
     }
 
-    if (!found) {
+    if (result != SQLITE_DONE) {
+        cout << "Database read error: " << sqlite3_errmsg(db) << '\n';
+    } else if (!found) {
         cout << "No student records found.\n";
     }
 
@@ -89,6 +144,11 @@ void searchStudent(sqlite3* db) {
     string id;
     cout << "\nEnter student ID to search: ";
     getline(cin, id);
+    id = trim(id);
+    if (!validStudentId(id)) {
+        cout << "Error: Enter a valid student ID to search.\n";
+        return;
+    }
 
     const char* sql =
         "SELECT student_id, name, email FROM students WHERE student_id = ?;";
@@ -99,9 +159,13 @@ void searchStudent(sqlite3* db) {
         return;
     }
 
-    sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
+    if (!bindText(db, stmt, 1, id)) {
+        sqlite3_finalize(stmt);
+        return;
+    }
 
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
+    int result = sqlite3_step(stmt);
+    if (result == SQLITE_ROW) {
         auto textColumn = [&](int column) -> const char* {
             const unsigned char* value = sqlite3_column_text(stmt, column);
             return value ? reinterpret_cast<const char*>(value) : "";
@@ -111,22 +175,16 @@ void searchStudent(sqlite3* db) {
              << "ID: " << textColumn(0) << '\n'
              << "Name: " << textColumn(1) << '\n'
              << "Email: " << textColumn(2) << '\n';
-    } else {
+    } else if (result == SQLITE_DONE) {
         cout << "No student found with ID: " << id << '\n';
+    } else {
+        cout << "Database search error: " << sqlite3_errmsg(db) << '\n';
     }
 
     sqlite3_finalize(stmt);
 }
 
-
-static std::string trimCopy(const std::string& s) {
-    size_t a = s.find_first_not_of(" \t\r\n");
-    if (a == std::string::npos) return "";
-    size_t b = s.find_last_not_of(" \t\r\n");
-    return s.substr(a, b - a + 1);
-}
-
-// role: "admin" or "teacher" are allowed; anything else is rejected.(this is fask case)
+// role: "admin" or "teacher" are allowed; anything else is rejected.
 bool updateStudent(sqlite3* db, const std::string& role) {
     // ---- 1. Permission ----
     if (role != "admin" && role != "teacher") {
@@ -138,7 +196,7 @@ bool updateStudent(sqlite3* db, const std::string& role) {
     std::cout << "\nEnter student ID to update: ";
     std::string oldId;
     std::getline(std::cin, oldId);
-    oldId = trimCopy(oldId);
+    oldId = trim(oldId);
 
     if (oldId.empty()) {
         std::cout << "Error: student ID is required.\n";
@@ -176,29 +234,23 @@ bool updateStudent(sqlite3* db, const std::string& role) {
     std::cout << "New name [" << curName << "]: ";
     std::string newName;
     std::getline(std::cin, newName);
-    newName = trimCopy(newName);
+    newName = trim(newName);
     if (newName.empty()) newName = curName;
 
     std::cout << "New email[" << curEmail << "]: ";
     std::string newEmail;
     std::getline(std::cin, newEmail);
-    newEmail = trimCopy(newEmail);
+    newEmail = trim(newEmail);
     if (newEmail.empty()) newEmail = curEmail;
 
     // ---- 5. Validate ----
-    if (newName.empty()) {
-        std::cout << "Error: name is required. Update rejected.\n";
+    if (!validName(newName)) {
+        std::cout << "Error: name is required and must be 1-100 characters. Update rejected.\n";
         return false;
     }
-    if (!newEmail.empty()) {
-        auto at  = newEmail.find('@');
-        auto dot = newEmail.find('.', at == std::string::npos ? 0 : at);
-        if (at == std::string::npos || at == 0 ||
-            dot == std::string::npos || dot == newEmail.size() - 1 ||
-            newEmail.find(' ') != std::string::npos) {
-            std::cout << "Error: email format is invalid. Update rejected.\n";
-            return false;
-        }
+    if (!validEmail(newEmail)) {
+        std::cout << "Error: email format is invalid. Update rejected.\n";
+        return false;
     }
 
     // ---- 6. Save ----
@@ -228,7 +280,6 @@ bool updateStudent(sqlite3* db, const std::string& role) {
     return true;
 }
 
-
 int main() {
     sqlite3* db = nullptr;
 
@@ -255,17 +306,18 @@ int main() {
         return 1;
     }
 
-    int choice;
+    int choice = -1;
     do {
         cout << "\n=== Student Record System ===\n"
              << "1. Create student record\n"
              << "2. View all students\n"
              << "3. Search student by ID\n"
-             << "4. Update record \n"
+             << "4. Update record\n"
              << "0. Exit\n"
              << "Choose: ";
 
         if (!(cin >> choice)) {
+            if (cin.eof()) break;
             cin.clear();
             cin.ignore(numeric_limits<streamsize>::max(), '\n');
             cout << "Please enter a valid number.\n";
