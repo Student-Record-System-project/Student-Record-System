@@ -1,4 +1,7 @@
 #include <iostream>
+#include "auth.h"
+#include "subjects.h"
+#include "grades.h"
 #include <string>
 #include <limits>
 #include <cctype>
@@ -370,6 +373,7 @@ bool deleteStudent(sqlite3* db, const std::string& role) {
     return true;
 }
 
+
 int main() {
     sqlite3* db = nullptr;
 
@@ -386,28 +390,71 @@ int main() {
         "CREATE TABLE IF NOT EXISTS students ("
         "student_id TEXT PRIMARY KEY,"
         "name TEXT NOT NULL,"
-        "email TEXT"
-        ");";
+        "email TEXT);";
 
-    char* error = nullptr;
-    if (sqlite3_exec(db, createTable, nullptr, nullptr, &error) != SQLITE_OK) {
-        cerr << "Table creation failed: "
-             << (error ? error : "unknown error") << '\n';
-        sqlite3_free(error);
+    if (sqlite3_exec(db, createTable, nullptr, nullptr, nullptr) != SQLITE_OK ||
+        !initializeAuth(db) ||
+        !initializeSubjects(db) ||
+        !initializeGrades(db)) {
+        cerr << "Database initialization failed: "
+             << sqlite3_errmsg(db) << '\n';
         sqlite3_close(db);
         return 1;
     }
 
+    if (!setupFirstAdmin(db)) {
+        sqlite3_close(db);
+        return 1;
+    }
+
+    string username, role;
+    while (!loginUser(db, username, role)) {
+        if (!cin || cin.eof()) {
+            sqlite3_close(db);
+            return 1;
+        }
+        cout << "Please try logging in again.\n";
+    }
+
+    // Normalize roles for the existing student update/delete functions.
+    for (char& c : role)
+        c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+
     int choice = -1;
+
     do {
         cout << "\n=== Student Record System ===\n"
-             << "1. Create student record\n"
-             << "2. View all students\n"
-             << "3. Search student by ID\n"
-             << "4. Update record\n"
-             << "5. Delete record\n"
-             << "0. Exit\n"
-             << "Choose: ";
+             << "Logged in as: " << username
+             << " | Role: " << role << '\n';
+
+        if (role == "admin") {
+            cout << "1. Create student record\n"
+                 << "2. View all students\n"
+                 << "3. Search student by ID\n"
+                 << "4. Update student record\n"
+                 << "5. Delete student record\n"
+                 << "6. Create user account\n"
+                 << "7. Add subject\n"
+                 << "8. List subjects\n"
+                 << "9. Add grade\n"
+                 << "10. View grades for student\n"
+                 << "0. Exit\n";
+        } else if (role == "faculty") {
+            cout << "2. View all students\n"
+                 << "3. Search student by ID\n"
+                 << "9. Add grade\n"
+                 << "10. View grades for student\n"
+                 << "0. Exit\n";
+        } else if (role == "student") {
+            cout << "10. View my grades\n"
+                 << "0. Exit\n";
+        } else {
+            cout << "2. View all students\n"
+                 << "3. Search student by ID\n"
+                 << "0. Exit\n";
+        }
+
+        cout << "Choose: ";
 
         if (!(cin >> choice)) {
             if (cin.eof()) break;
@@ -416,17 +463,132 @@ int main() {
             cout << "Please enter a valid number.\n";
             continue;
         }
-
         cin.ignore(numeric_limits<streamsize>::max(), '\n');
 
         switch (choice) {
-            case 1: createStudent(db); break;
-            case 2: viewStudents(db); break;
-            case 3: searchStudent(db); break;
-            case 4: updateStudent(db, role); break;
-            case 5: deleteStudent(db, role); break;
-            case 0: cout << "Application closed.\n"; break;
-            default: cout << "Invalid option.\n";
+            case 1:
+                if (role == "admin") createStudent(db);
+                else cout << "Access denied.\n";
+                break;
+
+            case 2:
+                if (role == "admin" || role == "faculty" ||
+                    role == "staff")
+                    viewStudents(db);
+                else cout << "Access denied.\n";
+                break;
+
+            case 3:
+                if (role == "admin" || role == "faculty" ||
+                    role == "staff")
+                    searchStudent(db);
+                else cout << "Access denied.\n";
+                break;
+
+            case 4:
+                if (role == "admin") updateStudent(db, role);
+                else cout << "Access denied.\n";
+                break;
+
+            case 5:
+                if (role == "admin") deleteStudent(db, role);
+                else cout << "Access denied.\n";
+                break;
+
+            case 6: {
+                if (role != "admin") {
+                    cout << "Access denied.\n";
+                    break;
+                }
+
+                string newUsername, password, newRole;
+                cout << "New username: ";
+                getline(cin, newUsername);
+                cout << "New password (10-128 characters): ";
+                getline(cin, password);
+                cout << "Role (Admin/Faculty/Staff/Student): ";
+                getline(cin, newRole);
+
+                createUser(db, newUsername, password, newRole);
+                break;
+            }
+
+            case 7:
+                if (role == "admin") addSubject(db);
+                else cout << "Access denied.\n";
+                break;
+
+            case 8:
+                if (role == "admin") listSubjects(db);
+                else cout << "Access denied.\n";
+                break;
+
+            case 9:
+                if (role == "admin" || role == "faculty")
+                    addGrade(db);
+                else cout << "Access denied.\n";
+                break;
+
+            case 10: {
+                if (role != "admin" && role != "faculty" &&
+                    role != "student") {
+                    cout << "Access denied.\n";
+                    break;
+                }
+
+                string studentId;
+                if (role == "student") {
+                    // Student accounts must use their student ID as username.
+                    studentId = username;
+                } else {
+                    cout << "Student ID: ";
+                    getline(cin, studentId);
+                }
+
+                sqlite3_stmt* stmt = nullptr;
+                const char* sql =
+                    "SELECT s.subject_code, s.subject_name, g.marks "
+                    "FROM grades g JOIN subjects s "
+                    "ON s.subject_id = g.subject_id "
+                    "WHERE g.student_id = ? ORDER BY s.subject_code;";
+
+                if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr)
+                    != SQLITE_OK) {
+                    cout << "Database error: "
+                         << sqlite3_errmsg(db) << '\n';
+                    break;
+                }
+
+                sqlite3_bind_text(stmt, 1, studentId.c_str(),
+                                  -1, SQLITE_TRANSIENT);
+
+                cout << "\n--- Grades for " << studentId << " ---\n";
+                bool found = false;
+                int rc;
+
+                while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+                    found = true;
+                    cout << sqlite3_column_text(stmt, 0) << " | "
+                         << sqlite3_column_text(stmt, 1)
+                         << " | Marks: "
+                         << sqlite3_column_double(stmt, 2) << '\n';
+                }
+
+                if (!found && rc == SQLITE_DONE)
+                    cout << "No grades found.\n";
+                if (rc != SQLITE_DONE)
+                    cout << "Error reading grades.\n";
+
+                sqlite3_finalize(stmt);
+                break;
+            }
+
+            case 0:
+                cout << "Application closed.\n";
+                break;
+
+            default:
+                cout << "Invalid option.\n";
         }
     } while (choice != 0);
 
