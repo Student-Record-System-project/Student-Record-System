@@ -2,6 +2,7 @@
 #include "auth.h"
 #include "subjects.h"
 #include "grades.h"
+#include "rbac.h"
 #include <string>
 #include <limits>
 #include <cctype>
@@ -191,7 +192,7 @@ void searchStudent(sqlite3* db) {
 // Update student record — admin/teacher only
 // ============================================================
 bool updateStudent(sqlite3* db, const std::string& role) {
-    if (role != "admin" && role != "teacher") {
+    if (!hasPermission(role, Permission::UpdateStudent)) {
         std::cout << "Access denied: only admins and teachers can update records.\n";
         return false;
     }
@@ -283,7 +284,7 @@ bool updateStudent(sqlite3* db, const std::string& role) {
 // Delete student record — admin/teacher only
 // ============================================================
 bool deleteStudent(sqlite3* db, const std::string& role) {
-    if (role != "admin" && role != "teacher") {
+    if (!hasPermission(role, Permission::DeleteStudent)) {
         std::cout << "Access denied: only admins and teachers can delete records.\n";
         return false;
     }
@@ -427,32 +428,37 @@ int main() {
              << "Logged in as: " << username
              << " | Role: " << role << '\n';
 
-        if (role == "admin") {
-            cout << "1. Create student record\n"
-                 << "2. View all students\n"
-                 << "3. Search student by ID\n"
-                 << "4. Update student record\n"
-                 << "5. Delete student record\n"
-                 << "6. Create user account\n"
-                 << "7. Add subject\n"
-                 << "8. List subjects\n"
-                 << "9. Add grade\n"
-                 << "10. View grades for student\n"
-                 << "0. Exit\n";
-        } else if (role == "faculty") {
-            cout << "2. View all students\n"
-                 << "3. Search student by ID\n"
-                 << "9. Add grade\n"
-                 << "10. View grades for student\n"
-                 << "0. Exit\n";
-        } else if (role == "student") {
-            cout << "10. View my grades\n"
-                 << "0. Exit\n";
-        } else {
-            cout << "2. View all students\n"
-                 << "3. Search student by ID\n"
-                 << "0. Exit\n";
+        if (hasPermission(role, Permission::CreateStudent))
+            cout << "1. Create student record\n";
+
+        if (hasPermission(role, Permission::ViewStudents))
+            cout << "2. View all students\n";
+
+        if (hasPermission(role, Permission::SearchStudents))
+            cout << "3. Search student by ID\n";
+
+        if (hasPermission(role, Permission::UpdateStudent))
+            cout << "4. Update student record\n";
+
+        if (hasPermission(role, Permission::DeleteStudent))
+            cout << "5. Delete student record\n";
+
+        if (hasPermission(role, Permission::ManageUsers))
+            cout << "6. Create user account\n";
+
+        if (hasPermission(role, Permission::ManageSubjects)) {
+    cout << "7. Add subject\n";
+            cout << "8. List subjects\n";
         }
+
+        if (hasPermission(role, Permission::AddGrades))
+            cout << "9. Add grade\n";
+
+        if (hasPermission(role, Permission::ViewAllGrades) ||
+            hasPermission(role, Permission::ViewOwnGrades))
+            cout << "10. View grades\n";
+
+        cout << "0. Exit\n";
 
         cout << "Choose: ";
 
@@ -467,36 +473,37 @@ int main() {
 
         switch (choice) {
             case 1:
-                if (role == "admin") createStudent(db);
+                if (hasPermission(role, Permission::CreateStudent))
+                    createStudent(db);
                 else cout << "Access denied.\n";
                 break;
 
             case 2:
-                if (role == "admin" || role == "faculty" ||
-                    role == "staff")
+                if (hasPermission(role, Permission::ViewStudents))
                     viewStudents(db);
                 else cout << "Access denied.\n";
                 break;
 
             case 3:
-                if (role == "admin" || role == "faculty" ||
-                    role == "staff")
+                if (hasPermission(role, Permission::SearchStudents))
                     searchStudent(db);
                 else cout << "Access denied.\n";
                 break;
 
             case 4:
-                if (role == "admin") updateStudent(db, role);
+                if (hasPermission(role, Permission::UpdateStudent))
+                    updateStudent(db, role);
                 else cout << "Access denied.\n";
                 break;
 
             case 5:
-                if (role == "admin") deleteStudent(db, role);
+                if (hasPermission(role, Permission::DeleteStudent))
+                    deleteStudent(db, role);
                 else cout << "Access denied.\n";
                 break;
 
             case 6: {
-                if (role != "admin") {
+                if (!hasPermission(role, Permission::ManageUsers)) {
                     cout << "Access denied.\n";
                     break;
                 }
@@ -514,24 +521,26 @@ int main() {
             }
 
             case 7:
-                if (role == "admin") addSubject(db);
+                if (hasPermission(role, Permission::ManageSubjects))
+                    addSubject(db);
                 else cout << "Access denied.\n";
                 break;
 
             case 8:
-                if (role == "admin") listSubjects(db);
+                if (hasPermission(role, Permission::ManageSubjects))
+                    listSubjects(db);
                 else cout << "Access denied.\n";
                 break;
 
             case 9:
-                if (role == "admin" || role == "faculty")
+                if (hasPermission(role, Permission::AddGrades))
                     addGrade(db);
                 else cout << "Access denied.\n";
                 break;
 
-            case 10: {
-                if (role != "admin" && role != "faculty" &&
-                    role != "student") {
+            case 10: {.\student_system.exe
+                if (!hasPermission(role, Permission::ViewAllGrades) &&
+                    !hasPermission(role, Permission::ViewOwnGrades)) {
                     cout << "Access denied.\n";
                     break;
                 }
