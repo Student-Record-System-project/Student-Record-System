@@ -16,5 +16,6 @@ void viewAttendance(sqlite3* db);
 
 double calculateAttendancePercentage(int presentCount, int totalCount, int lateCount = 0);
 double calculateAttendancePercentage(sqlite3* db, const std::string& studentId, int subjectId = 0);
+double calculateAttendancePercentage(sqlite3* db, const std::string& studentId, int subjectId, bool* ok);
 
 #endif // ATTENDANCE_H
