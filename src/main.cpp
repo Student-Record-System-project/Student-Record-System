@@ -3,6 +3,7 @@
 #include "subjects.h"
 #include "grades.h"
 #include "attendance.h"
+#include "reports.h"
 #include "rbac.h"
 #include <string>
 #include <limits>
@@ -396,7 +397,8 @@ int main() {
         !initializeAuth(db) ||
         !initializeSubjects(db) ||
         !initializeGrades(db) ||
-        !initializeAttendance(db)) {
+        !initializeAttendance(db) ||
+        !initializeReports(db)) {
         cerr << "Database initialization failed: "
              << sqlite3_errmsg(db) << '\n';
         sqlite3_close(db);
@@ -467,6 +469,15 @@ int main() {
         if (hasPermission(role, Permission::ViewAllAttendance) ||
             hasPermission(role, Permission::ViewOwnAttendance))
             cout << "13. View attendance\n";
+
+        if (hasPermission(role, Permission::GenerateAcademicReport))
+            cout << "14. Generate academic report\n";
+
+        if (hasPermission(role, Permission::ViewGradeSheet))
+            cout << "15. View grade sheet\n";
+
+        if (hasPermission(role, Permission::ViewAttendanceSummary))
+            cout << "16. View attendance summary\n";
 
         cout << "0. Exit\n";
 
@@ -621,6 +632,24 @@ int main() {
                 if (hasPermission(role, Permission::ViewAllAttendance) ||
                     hasPermission(role, Permission::ViewOwnAttendance))
                     viewAttendance(db, username, role);
+                else cout << "Access denied.\n";
+                break;
+
+            case 14:
+                if (hasPermission(role, Permission::GenerateAcademicReport))
+                    generateAcademicReport(db, role, username);
+                else cout << "Access denied.\n";
+                break;
+
+            case 15:
+                if (hasPermission(role, Permission::ViewGradeSheet))
+                    viewGradeSheet(db, role, username);
+                else cout << "Access denied.\n";
+                break;
+
+            case 16:
+                if (hasPermission(role, Permission::ViewAttendanceSummary))
+                    viewAttendanceSummary(db, role, username);
                 else cout << "Access denied.\n";
                 break;
 
