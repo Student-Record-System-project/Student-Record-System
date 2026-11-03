@@ -15,7 +15,11 @@ enum class Permission {
     ManageSubjects,
     AddGrades,
     ViewAllGrades,
-    ViewOwnGrades
+    ViewOwnGrades,
+    RecordAttendance,
+    UpdateAttendance,
+    ViewAllAttendance,
+    ViewOwnAttendance
 };
 
 inline std::string normalizeRole(std::string role) {
@@ -43,6 +47,10 @@ inline bool hasPermission(
             case Permission::AddGrades:
             case Permission::ViewAllGrades:
             case Permission::ViewOwnGrades:
+            case Permission::RecordAttendance:
+            case Permission::UpdateAttendance:
+            case Permission::ViewAllAttendance:
+            case Permission::ViewOwnAttendance:
                 return true;
             default:
                 return false;
@@ -51,11 +59,13 @@ inline bool hasPermission(
 
     if (role == "staff") {
         return permission == Permission::ViewStudents ||
-               permission == Permission::SearchStudents;
+               permission == Permission::SearchStudents ||
+               permission == Permission::ViewAllAttendance;
     }
 
     if (role == "student") {
-        return permission == Permission::ViewOwnGrades;
+        return permission == Permission::ViewOwnGrades ||
+               permission == Permission::ViewOwnAttendance;
     }
 
     return false;
