@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, 'feat/**' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both ubuntu-latest and macos-latest are retained in the matrix to verify cross-platform
+        # portability across Linux and macOS. Execution duration is low (< 2 minutes per runner).
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev sqlite3
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install sqlite || true
+
+      - name: Build student_system
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -O2 -Iinclude -Isrc \
+              $(find . -name '*.cpp' -not -path './tests/*') \
+              -lsqlite3 -o student_system
+
+      - name: Upload compiled binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: student_system-${{ matrix.os }}
+          path: student_system
+          retention-days: 7
+
+      - name: Run attendance acceptance tests
+        run: |
+          chmod +x verify_attendance.sh
+          ./verify_attendance.sh
