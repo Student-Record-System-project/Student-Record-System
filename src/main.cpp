@@ -2,6 +2,7 @@
 #include "auth.h"
 #include "subjects.h"
 #include "grades.h"
+#include "attendance.h"
 #include "rbac.h"
 #include <string>
 #include <limits>
@@ -9,8 +10,6 @@
 #include "sqlite3.h"
 
 using namespace std;
-
-
 
 // Shared validation helpers. Keep these independent of the SQLite schema.
 string trim(const string& value) {
@@ -396,7 +395,8 @@ int main() {
     if (sqlite3_exec(db, createTable, nullptr, nullptr, nullptr) != SQLITE_OK ||
         !initializeAuth(db) ||
         !initializeSubjects(db) ||
-        !initializeGrades(db)) {
+        !initializeGrades(db) ||
+        !initializeAttendance(db)) {
         cerr << "Database initialization failed: "
              << sqlite3_errmsg(db) << '\n';
         sqlite3_close(db);
@@ -457,6 +457,16 @@ int main() {
         if (hasPermission(role, Permission::ViewAllGrades) ||
             hasPermission(role, Permission::ViewOwnGrades))
             cout << "10. View grades\n";
+
+        if (hasPermission(role, Permission::RecordAttendance))
+            cout << "11. Record attendance\n";
+
+        if (hasPermission(role, Permission::UpdateAttendance))
+            cout << "12. Update attendance\n";
+
+        if (hasPermission(role, Permission::ViewAllAttendance) ||
+            hasPermission(role, Permission::ViewOwnAttendance))
+            cout << "13. View attendance\n";
 
         cout << "0. Exit\n";
 
@@ -594,6 +604,25 @@ int main() {
                 sqlite3_finalize(stmt);
                 break;
             }
+
+            case 11:
+                if (hasPermission(role, Permission::RecordAttendance))
+                    recordAttendance(db);
+                else cout << "Access denied.\n";
+                break;
+
+            case 12:
+                if (hasPermission(role, Permission::UpdateAttendance))
+                    updateAttendance(db);
+                else cout << "Access denied.\n";
+                break;
+
+            case 13:
+                if (hasPermission(role, Permission::ViewAllAttendance) ||
+                    hasPermission(role, Permission::ViewOwnAttendance))
+                    viewAttendance(db, username, role);
+                else cout << "Access denied.\n";
+                break;
 
             case 0:
                 cout << "Application closed.\n";
