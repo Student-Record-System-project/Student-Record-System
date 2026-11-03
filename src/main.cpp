@@ -2,6 +2,7 @@
 #include "auth.h"
 #include "subjects.h"
 #include "grades.h"
+#include "attendance.h"
 #include "rbac.h"
 #include <string>
 #include <limits>
@@ -9,8 +10,6 @@
 #include "sqlite3.h"
 
 using namespace std;
-
-std::string role = "admin";   // replace with actual when auth is implemented
 
 // Shared validation helpers. Keep these independent of the SQLite schema.
 string trim(const string& value) {
@@ -55,11 +54,11 @@ bool createStudent(sqlite3* db) {
     string id, name, email;
 
     cout << "\nStudent ID: ";
-    getline(cin, id);
+    if (!getline(cin, id)) return false;
     cout << "Name: ";
-    getline(cin, name);
+    if (!getline(cin, name)) return false;
     cout << "Email: ";
-    getline(cin, email);
+    if (!getline(cin, email)) return false;
 
     id = trim(id);
     name = trim(name);
@@ -147,7 +146,7 @@ void viewStudents(sqlite3* db) {
 void searchStudent(sqlite3* db) {
     string id;
     cout << "\nEnter student ID to search: ";
-    getline(cin, id);
+    if (!getline(cin, id)) return;
     id = trim(id);
     if (!validStudentId(id)) {
         cout << "Error: Enter a valid student ID to search.\n";
@@ -199,7 +198,7 @@ bool updateStudent(sqlite3* db, const std::string& role) {
 
     std::cout << "\nEnter student ID to update: ";
     std::string oldId;
-    std::getline(std::cin, oldId);
+    if (!std::getline(std::cin, oldId)) return false;
     oldId = trim(oldId);
 
     if (oldId.empty()) {
@@ -235,13 +234,13 @@ bool updateStudent(sqlite3* db, const std::string& role) {
 
     std::cout << "New name [" << curName << "]: ";
     std::string newName;
-    std::getline(std::cin, newName);
+    if (!std::getline(std::cin, newName)) return false;
     newName = trim(newName);
     if (newName.empty()) newName = curName;
 
     std::cout << "New email[" << curEmail << "]: ";
     std::string newEmail;
-    std::getline(std::cin, newEmail);
+    if (!std::getline(std::cin, newEmail)) return false;
     newEmail = trim(newEmail);
     if (newEmail.empty()) newEmail = curEmail;
 
@@ -291,7 +290,7 @@ bool deleteStudent(sqlite3* db, const std::string& role) {
 
     std::cout << "\nEnter student ID to delete: ";
     std::string id;
-    std::getline(std::cin, id);
+    if (!std::getline(std::cin, id)) return false;
     id = trim(id);
 
     if (id.empty()) {
@@ -328,7 +327,7 @@ bool deleteStudent(sqlite3* db, const std::string& role) {
               << "Type 'yes' to confirm, anything else to cancel: ";
 
     std::string confirm;
-    std::getline(std::cin, confirm);
+    if (!std::getline(std::cin, confirm)) return false;
     confirm = trim(confirm);
 
     if (confirm != "yes") {
@@ -396,7 +395,8 @@ int main() {
     if (sqlite3_exec(db, createTable, nullptr, nullptr, nullptr) != SQLITE_OK ||
         !initializeAuth(db) ||
         !initializeSubjects(db) ||
-        !initializeGrades(db)) {
+        !initializeGrades(db) ||
+        !initializeAttendance(db)) {
         cerr << "Database initialization failed: "
              << sqlite3_errmsg(db) << '\n';
         sqlite3_close(db);
@@ -458,6 +458,16 @@ int main() {
             hasPermission(role, Permission::ViewOwnGrades))
             cout << "10. View grades\n";
 
+        if (hasPermission(role, Permission::RecordAttendance))
+            cout << "11. Record attendance\n";
+
+        if (hasPermission(role, Permission::UpdateAttendance))
+            cout << "12. Update attendance\n";
+
+        if (hasPermission(role, Permission::ViewAllAttendance) ||
+            hasPermission(role, Permission::ViewOwnAttendance))
+            cout << "13. View attendance\n";
+
         cout << "0. Exit\n";
 
         cout << "Choose: ";
@@ -510,11 +520,11 @@ int main() {
 
                 string newUsername, password, newRole;
                 cout << "New username: ";
-                getline(cin, newUsername);
+                if (!getline(cin, newUsername)) break;
                 cout << "New password (10-128 characters): ";
-                getline(cin, password);
+                if (!getline(cin, password)) break;
                 cout << "Role (Admin/Faculty/Staff/Student): ";
-                getline(cin, newRole);
+                if (!getline(cin, newRole)) break;
 
                 createUser(db, newUsername, password, newRole);
                 break;
@@ -538,7 +548,7 @@ int main() {
                 else cout << "Access denied.\n";
                 break;
 
-            case 10: {.\student_system.exe
+            case 10: {
                 if (!hasPermission(role, Permission::ViewAllGrades) &&
                     !hasPermission(role, Permission::ViewOwnGrades)) {
                     cout << "Access denied.\n";
@@ -546,12 +556,13 @@ int main() {
                 }
 
                 string studentId;
-                if (role == "student") {
-                    // Student accounts must use their student ID as username.
+                if (!hasPermission(role, Permission::ViewAllGrades)) {
+                    // Users without ViewAllGrades must view only their own grades
                     studentId = username;
                 } else {
                     cout << "Student ID: ";
-                    getline(cin, studentId);
+                    if (!getline(cin, studentId)) break;
+                    studentId = trim(studentId);
                 }
 
                 sqlite3_stmt* stmt = nullptr;
@@ -577,8 +588,10 @@ int main() {
 
                 while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
                     found = true;
-                    cout << sqlite3_column_text(stmt, 0) << " | "
-                         << sqlite3_column_text(stmt, 1)
+                    const unsigned char* code = sqlite3_column_text(stmt, 0);
+                    const unsigned char* name = sqlite3_column_text(stmt, 1);
+                    cout << (code ? reinterpret_cast<const char*>(code) : "N/A") << " | "
+                         << (name ? reinterpret_cast<const char*>(name) : "N/A")
                          << " | Marks: "
                          << sqlite3_column_double(stmt, 2) << '\n';
                 }
@@ -591,6 +604,25 @@ int main() {
                 sqlite3_finalize(stmt);
                 break;
             }
+
+            case 11:
+                if (hasPermission(role, Permission::RecordAttendance))
+                    recordAttendance(db);
+                else cout << "Access denied.\n";
+                break;
+
+            case 12:
+                if (hasPermission(role, Permission::UpdateAttendance))
+                    updateAttendance(db);
+                else cout << "Access denied.\n";
+                break;
+
+            case 13:
+                if (hasPermission(role, Permission::ViewAllAttendance) ||
+                    hasPermission(role, Permission::ViewOwnAttendance))
+                    viewAttendance(db, username, role);
+                else cout << "Access denied.\n";
+                break;
 
             case 0:
                 cout << "Application closed.\n";
