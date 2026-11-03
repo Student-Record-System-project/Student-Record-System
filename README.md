@@ -132,15 +132,6 @@ The interactive CLI presents options gated by the active user's permissions:
 
 ---
 
-## Attendance Policy
-
-Attendance entries support three validated status values: `Present`, `Absent`, and `Late`.
-The attendance percentage is calculated as:
-$$\text{Percentage} = \frac{\text{Present} + (\text{kLateCountsAsPresent} \ ? \ \text{Late} : 0)}{\text{Total Sessions}} \times 100$$
-Per institutional policy defined in `src/attendance.h`, `kLateCountsAsPresent = false`. Late arrivals are logged for auditing purposes but do not count as full attendance toward the standard percentage calculation.
-
----
-
 ## CI/CD
 
 Continuous integration is managed by GitHub Actions in [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
@@ -151,40 +142,6 @@ Continuous integration is managed by GitHub Actions in [`.github/workflows/ci.ym
 - **Branch Policy**: `main` is protected; work happens on feature branches and merges via PR with green CI.
 
 ---
-
-## Testing
-
-Acceptance tests can be run locally in any Bash shell (Linux, macOS, Git Bash on Windows):
-
-```bash
-chmod +x verify_attendance.sh verify_reports.sh
-./verify_attendance.sh
-./verify_reports.sh
-```
-
-- **[`verify_attendance.sh`](verify_attendance.sh)**:
-  - `TC-ATT-01`: Faculty records attendance for student and subject.
-  - `TC-ATT-02`: Faculty updates attendance from Absent to Present.
-  - `TC-ATT-03`: Calculates attendance percentage before (50.00%) and after update (100.00%).
-  - RBAC verification: Student attempt to update attendance is rejected (`Access denied`).
-- **[`verify_reports.sh`](verify_reports.sh)**:
-  - `TC-RPT-01`: Faculty generates full academic report (grades + attendance + per-subject breakdown + percentage).
-  - `TC-RPT-02`: View grade sheet displays grades and omits attendance; view attendance summary displays attendance and omits grades.
-  - RBAC verification: Student role rejected from generating reports; forced to self when viewing grade sheet.
-  - Staff verification: Staff role rejected from generating reports; permitted to view grade sheets and attendance summaries for any student.
-  - Database consistency: Compares report data against direct SQLite records.
-
----
-
-## Acceptance-Test Mapping
-
-| SRS ID | Criterion | Where Implemented | Where Tested |
-| :--- | :--- | :--- | :--- |
-| **SRS-F-012** | Record attendance | `src/attendance.cpp:recordAttendance` | `TC-ATT-01` (`verify_attendance.sh`) |
-| **SRS-F-013** | Update attendance | `src/attendance.cpp:updateAttendance` | `TC-ATT-02` (`verify_attendance.sh`) |
-| **SRS-F-014** | Calculate attendance percentage | `src/attendance.cpp:calculateAttendancePercentage` | `TC-ATT-03` (`verify_attendance.sh`) |
-| **SRS-F-016** | Generate academic report | `src/reports.cpp:generateAcademicReport` | `TC-RPT-01` (`verify_reports.sh`) |
-| **SRS-F-017** | View grade sheet / attendance summary | `src/reports.cpp:viewGradeSheet`, `src/reports.cpp:viewAttendanceSummary` | `TC-RPT-02` (`verify_reports.sh`) |
 
 ---
 
@@ -219,17 +176,3 @@ Student-Record-System/
 ```
 
 ---
-
-## Known Limitations / Roadmap
-
-- **Pagination & Query Limits**: Large histories currently output entirely to stdout; cursor pagination or limit/offset is planned.
-- **Export Options**: Academic reports currently output to standard console; CSV/PDF report exporting is planned for future sprints.
-- **Audit Logging**: An immutable audit log table for grade and attendance revisions (`changed_by`, `timestamp`) is planned.
-- **Unit Testing**: Acceptance tests currently run via shell harnesses; integration with GoogleTest/CTest is planned.
-- **Release Automation**: Automatic GitHub release creation when tags matching `v*` are pushed.
-
----
-
-## License
-
-No separate LICENSE file is currently included in the repository. Institutional / project repository terms apply.
