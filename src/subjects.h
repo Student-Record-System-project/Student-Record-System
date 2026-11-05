@@ -5,6 +5,7 @@
 
 bool initializeSubjects(sqlite3* db);
 void addSubject(sqlite3* db);
+void updateSubjectMetadata(sqlite3* db);
 void listSubjects(sqlite3* db);
 
 #endif

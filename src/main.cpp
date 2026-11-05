@@ -1,18 +1,24 @@
+
 #include <iostream>
+#include <string>
+#include <limits>
+#include <cctype>
+
 #include "auth.h"
 #include "subjects.h"
 #include "grades.h"
 #include "attendance.h"
 #include "reports.h"
 #include "rbac.h"
-#include <string>
-#include <limits>
-#include <cctype>
+#include "gpa.h"
 #include "sqlite3.h"
 
 using namespace std;
 
-// Shared validation helpers. Keep these independent of the SQLite schema.
+// ============================================================
+// Shared validation helpers
+// ============================================================
+
 string trim(const string& value) {
     size_t first = value.find_first_not_of(" \t\r\n");
     if (first == string::npos) return "";
@@ -22,56 +28,88 @@ string trim(const string& value) {
 
 bool validStudentId(const string& id) {
     if (id.empty() || id.size() > 50) return false;
+
     for (unsigned char c : id) {
-        if (!isalnum(c) && c != '-' && c != '_') return false;
+        if (!isalnum(c) && c != '-' && c != '_')
+            return false;
     }
+
     return true;
 }
 
 bool validName(const string& name) {
     if (name.empty() || name.size() > 100) return false;
+
     for (unsigned char c : name) {
         if (iscntrl(c)) return false;
     }
+
     return true;
 }
 
 bool validEmail(const string& email) {
     if (email.empty()) return true;
-    if (email.size() > 254 || email.find(' ') != string::npos) return false;
+    if (email.size() > 254 || email.find(' ') != string::npos)
+        return false;
+
     size_t at = email.find('@');
-    if (at == string::npos || at == 0 || at != email.rfind('@')) return false;
+
+    if (at == string::npos || at == 0 || at != email.rfind('@'))
+        return false;
+
     size_t dot = email.find('.', at + 2);
-    return dot != string::npos && dot > at + 1 && dot + 1 < email.size();
+
+    return dot != string::npos &&
+           dot > at + 1 &&
+           dot + 1 < email.size();
 }
 
-bool bindText(sqlite3* db, sqlite3_stmt* stmt, int index, const string& value) {
-    int rc = sqlite3_bind_text(stmt, index, value.c_str(), -1, SQLITE_TRANSIENT);
-    if (rc != SQLITE_OK) cerr << "Database bind error: " << sqlite3_errmsg(db) << '\n';
+bool bindText(
+    sqlite3* db,
+    sqlite3_stmt* stmt,
+    int index,
+    const string& value
+) {
+    int rc = sqlite3_bind_text(
+        stmt, index, value.c_str(), -1, SQLITE_TRANSIENT
+    );
+
+    if (rc != SQLITE_OK)
+        cerr << "Database bind error: " << sqlite3_errmsg(db) << '\n';
+
     return rc == SQLITE_OK;
 }
+
+// ============================================================
+// Create student
+// ============================================================
 
 bool createStudent(sqlite3* db) {
     string id, name, email;
 
     cout << "\nStudent ID: ";
     if (!getline(cin, id)) return false;
+
     cout << "Name: ";
     if (!getline(cin, name)) return false;
+
     cout << "Email: ";
     if (!getline(cin, email)) return false;
 
     id = trim(id);
     name = trim(name);
     email = trim(email);
+
     if (!validStudentId(id)) {
         cout << "Error: Student ID must be 1-50 letters, digits, hyphens or underscores.\n";
         return false;
     }
+
     if (!validName(name)) {
         cout << "Error: Name must be 1-100 characters without control characters.\n";
         return false;
     }
+
     if (!validEmail(email)) {
         cout << "Error: Enter a valid email address or leave it blank.\n";
         return false;
@@ -81,6 +119,7 @@ bool createStudent(sqlite3* db) {
         "INSERT INTO students (student_id, name, email) VALUES (?, ?, ?);";
 
     sqlite3_stmt* stmt = nullptr;
+
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         cout << "Database error: " << sqlite3_errmsg(db) << '\n';
         return false;
@@ -109,22 +148,29 @@ bool createStudent(sqlite3* db) {
     return result == SQLITE_DONE;
 }
 
+// ============================================================
+// View students
+// ============================================================
+
 void viewStudents(sqlite3* db) {
     const char* sql =
         "SELECT student_id, name, email FROM students ORDER BY student_id;";
 
     sqlite3_stmt* stmt = nullptr;
+
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         cout << "Database error: " << sqlite3_errmsg(db) << '\n';
         return;
     }
 
     cout << "\n--- Student Records ---\n";
-    bool found = false;
 
+    bool found = false;
     int result;
+
     while ((result = sqlite3_step(stmt)) == SQLITE_ROW) {
         found = true;
+
         auto textColumn = [&](int column) -> const char* {
             const unsigned char* value = sqlite3_column_text(stmt, column);
             return value ? reinterpret_cast<const char*>(value) : "";
@@ -144,11 +190,18 @@ void viewStudents(sqlite3* db) {
     sqlite3_finalize(stmt);
 }
 
+// ============================================================
+// Search student
+// ============================================================
+
 void searchStudent(sqlite3* db) {
     string id;
+
     cout << "\nEnter student ID to search: ";
     if (!getline(cin, id)) return;
+
     id = trim(id);
+
     if (!validStudentId(id)) {
         cout << "Error: Enter a valid student ID to search.\n";
         return;
@@ -158,6 +211,7 @@ void searchStudent(sqlite3* db) {
         "SELECT student_id, name, email FROM students WHERE student_id = ?;";
 
     sqlite3_stmt* stmt = nullptr;
+
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         cout << "Database error: " << sqlite3_errmsg(db) << '\n';
         return;
@@ -169,6 +223,7 @@ void searchStudent(sqlite3* db) {
     }
 
     int result = sqlite3_step(stmt);
+
     if (result == SQLITE_ROW) {
         auto textColumn = [&](int column) -> const char* {
             const unsigned char* value = sqlite3_column_text(stmt, column);
@@ -189,163 +244,198 @@ void searchStudent(sqlite3* db) {
 }
 
 // ============================================================
-// Update student record — admin/teacher only
+// Update student record
 // ============================================================
-bool updateStudent(sqlite3* db, const std::string& role) {
+
+bool updateStudent(sqlite3* db, const string& role) {
     if (!hasPermission(role, Permission::UpdateStudent)) {
-        std::cout << "Access denied: only admins and teachers can update records.\n";
+        cout << "Access denied: only admins and teachers can update records.\n";
         return false;
     }
 
-    std::cout << "\nEnter student ID to update: ";
-    std::string oldId;
-    if (!std::getline(std::cin, oldId)) return false;
+    cout << "\nEnter student ID to update: ";
+
+    string oldId;
+    if (!getline(cin, oldId)) return false;
+
     oldId = trim(oldId);
 
     if (oldId.empty()) {
-        std::cout << "Error: student ID is required.\n";
+        cout << "Error: student ID is required.\n";
         return false;
     }
 
     sqlite3_stmt* fetch = nullptr;
-    if (sqlite3_prepare_v2(db,
+
+    if (sqlite3_prepare_v2(
+            db,
             "SELECT name, email FROM students WHERE student_id = ?;",
             -1, &fetch, nullptr) != SQLITE_OK) {
-        std::cout << "Database error: " << sqlite3_errmsg(db) << '\n';
+        cout << "Database error: " << sqlite3_errmsg(db) << '\n';
         return false;
     }
+
     sqlite3_bind_text(fetch, 1, oldId.c_str(), -1, SQLITE_TRANSIENT);
 
-    std::string curName, curEmail;
+    string curName, curEmail;
+
     if (sqlite3_step(fetch) == SQLITE_ROW) {
-        curName  = reinterpret_cast<const char*>(sqlite3_column_text(fetch, 0));
+        curName = reinterpret_cast<const char*>(
+            sqlite3_column_text(fetch, 0)
+        );
+
         const unsigned char* em = sqlite3_column_text(fetch, 1);
         curEmail = em ? reinterpret_cast<const char*>(em) : "";
     } else {
         sqlite3_finalize(fetch);
-        std::cout << "Error: no student found with ID '" << oldId << "'.\n";
+        cout << "Error: no student found with ID '" << oldId << "'.\n";
         return false;
     }
+
     sqlite3_finalize(fetch);
 
-    std::cout << "\nCurrent record:\n"
-              << "  Name : " << curName  << "\n"
-              << "  Email: " << curEmail << "\n"
-              << "Press Enter to keep a value unchanged.\n";
+    cout << "\nCurrent record:\n"
+         << "  Name : " << curName << '\n'
+         << "  Email: " << curEmail << '\n'
+         << "Press Enter to keep a value unchanged.\n";
 
-    std::cout << "New name [" << curName << "]: ";
-    std::string newName;
-    if (!std::getline(std::cin, newName)) return false;
+    cout << "New name [" << curName << "]: ";
+
+    string newName;
+    if (!getline(cin, newName)) return false;
+
     newName = trim(newName);
     if (newName.empty()) newName = curName;
 
-    std::cout << "New email[" << curEmail << "]: ";
-    std::string newEmail;
-    if (!std::getline(std::cin, newEmail)) return false;
+    cout << "New email [" << curEmail << "]: ";
+
+    string newEmail;
+    if (!getline(cin, newEmail)) return false;
+
     newEmail = trim(newEmail);
     if (newEmail.empty()) newEmail = curEmail;
 
     if (!validName(newName)) {
-        std::cout << "Error: name is required and must be 1-100 characters. Update rejected.\n";
+        cout << "Error: name is required and must be 1-100 characters. Update rejected.\n";
         return false;
     }
+
     if (!validEmail(newEmail)) {
-        std::cout << "Error: email format is invalid. Update rejected.\n";
+        cout << "Error: email format is invalid. Update rejected.\n";
         return false;
     }
 
     sqlite3_stmt* upd = nullptr;
-    if (sqlite3_prepare_v2(db,
+
+    if (sqlite3_prepare_v2(
+            db,
             "UPDATE students SET name = ?, email = ? WHERE student_id = ?;",
             -1, &upd, nullptr) != SQLITE_OK) {
-        std::cout << "Database error: " << sqlite3_errmsg(db) << '\n';
+        cout << "Database error: " << sqlite3_errmsg(db) << '\n';
         return false;
     }
-    sqlite3_bind_text(upd, 1, newName.c_str(),  -1, SQLITE_TRANSIENT);
+
+    sqlite3_bind_text(upd, 1, newName.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(upd, 2, newEmail.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(upd, 3, oldId.c_str(),    -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(upd, 3, oldId.c_str(), -1, SQLITE_TRANSIENT);
 
     int rc = sqlite3_step(upd);
     sqlite3_finalize(upd);
 
     if (rc != SQLITE_DONE) {
-        std::cout << "Database error: " << sqlite3_errmsg(db) << '\n';
+        cout << "Database error: " << sqlite3_errmsg(db) << '\n';
         return false;
     }
 
-    std::cout << "\nStudent record updated successfully.\n"
-              << "  ID   : " << oldId    << "\n"
-              << "  Name : " << newName  << "\n"
-              << "  Email: " << newEmail << "\n";
+    cout << "\nStudent record updated successfully.\n"
+         << "  ID   : " << oldId << '\n'
+         << "  Name : " << newName << '\n'
+         << "  Email: " << newEmail << '\n';
+
     return true;
 }
 
 // ============================================================
-// Delete student record — admin/teacher only
+// Delete student record
 // ============================================================
-bool deleteStudent(sqlite3* db, const std::string& role) {
+
+bool deleteStudent(sqlite3* db, const string& role) {
     if (!hasPermission(role, Permission::DeleteStudent)) {
-        std::cout << "Access denied: only admins and teachers can delete records.\n";
+        cout << "Access denied: only admins and teachers can delete records.\n";
         return false;
     }
 
-    std::cout << "\nEnter student ID to delete: ";
-    std::string id;
-    if (!std::getline(std::cin, id)) return false;
+    cout << "\nEnter student ID to delete: ";
+
+    string id;
+    if (!getline(cin, id)) return false;
+
     id = trim(id);
 
     if (id.empty()) {
-        std::cout << "Error: student ID is required.\n";
+        cout << "Error: student ID is required.\n";
         return false;
     }
 
     sqlite3_stmt* fetch = nullptr;
-    if (sqlite3_prepare_v2(db,
+
+    if (sqlite3_prepare_v2(
+            db,
             "SELECT name, email FROM students WHERE student_id = ?;",
             -1, &fetch, nullptr) != SQLITE_OK) {
-        std::cout << "Database error: " << sqlite3_errmsg(db) << '\n';
+        cout << "Database error: " << sqlite3_errmsg(db) << '\n';
         return false;
     }
+
     sqlite3_bind_text(fetch, 1, id.c_str(), -1, SQLITE_TRANSIENT);
 
-    std::string curName, curEmail;
+    string curName, curEmail;
+
     if (sqlite3_step(fetch) == SQLITE_ROW) {
-        curName  = reinterpret_cast<const char*>(sqlite3_column_text(fetch, 0));
+        curName = reinterpret_cast<const char*>(
+            sqlite3_column_text(fetch, 0)
+        );
+
         const unsigned char* em = sqlite3_column_text(fetch, 1);
         curEmail = em ? reinterpret_cast<const char*>(em) : "";
     } else {
         sqlite3_finalize(fetch);
-        std::cout << "Error: no student found with ID '" << id << "'.\n";
+        cout << "Error: no student found with ID '" << id << "'.\n";
         return false;
     }
+
     sqlite3_finalize(fetch);
 
-    std::cout << "\nAbout to delete this record:\n"
-              << "  ID   : " << id       << "\n"
-              << "  Name : " << curName  << "\n"
-              << "  Email: " << curEmail << "\n"
-              << "\nRelated grades and attendance will also be removed.\n"
-              << "Type 'yes' to confirm, anything else to cancel: ";
+    cout << "\nAbout to delete this record:\n"
+         << "  ID   : " << id << '\n'
+         << "  Name : " << curName << '\n'
+         << "  Email: " << curEmail << '\n'
+         << "\nRelated grades and attendance will also be removed.\n"
+         << "Type 'yes' to confirm, anything else to cancel: ";
 
-    std::string confirm;
-    if (!std::getline(std::cin, confirm)) return false;
+    string confirm;
+    if (!getline(cin, confirm)) return false;
+
     confirm = trim(confirm);
 
     if (confirm != "yes") {
-        std::cout << "Deletion cancelled. Record was not removed.\n";
+        cout << "Deletion cancelled. Record was not removed.\n";
         return false;
     }
 
     sqlite3_exec(db, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
 
     sqlite3_stmt* del = nullptr;
-    if (sqlite3_prepare_v2(db,
+
+    if (sqlite3_prepare_v2(
+            db,
             "DELETE FROM students WHERE student_id = ?;",
             -1, &del, nullptr) != SQLITE_OK) {
         sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
-        std::cout << "Database error: " << sqlite3_errmsg(db) << '\n';
+        cout << "Database error: " << sqlite3_errmsg(db) << '\n';
         return false;
     }
+
     sqlite3_bind_text(del, 1, id.c_str(), -1, SQLITE_TRANSIENT);
 
     int rc = sqlite3_step(del);
@@ -353,27 +443,30 @@ bool deleteStudent(sqlite3* db, const std::string& role) {
 
     if (rc != SQLITE_DONE) {
         sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
-        std::cout << "Database error while deleting: "
-                  << sqlite3_errmsg(db) << '\n';
+        cout << "Database error while deleting: "
+             << sqlite3_errmsg(db) << '\n';
         return false;
     }
 
     if (sqlite3_changes(db) == 0) {
         sqlite3_exec(db, "ROLLBACK;", nullptr, nullptr, nullptr);
-        std::cout << "Error: record was not deleted (it may have been "
-                     "removed already).\n";
+        cout << "Error: record was not deleted.\n";
         return false;
     }
 
     sqlite3_exec(db, "COMMIT;", nullptr, nullptr, nullptr);
 
-    std::cout << "\nStudent record deleted successfully.\n"
-              << "  Removed ID   : " << id       << "\n"
-              << "  Removed Name : " << curName  << "\n"
-              << "  Removed Email: " << curEmail << "\n";
+    cout << "\nStudent record deleted successfully.\n"
+         << "  Removed ID   : " << id << '\n'
+         << "  Removed Name : " << curName << '\n'
+         << "  Removed Email: " << curEmail << '\n';
+
     return true;
 }
 
+// ============================================================
+// Main application
+// ============================================================
 
 int main() {
     sqlite3* db = nullptr;
@@ -381,11 +474,14 @@ int main() {
     if (sqlite3_open("data/student_records.db", &db) != SQLITE_OK) {
         cerr << "Cannot open database: "
              << (db ? sqlite3_errmsg(db) : "allocation failed") << '\n';
+
         if (db) sqlite3_close(db);
         return 1;
     }
 
-    sqlite3_exec(db, "PRAGMA foreign_keys = ON;", nullptr, nullptr, nullptr);
+    sqlite3_exec(
+        db, "PRAGMA foreign_keys = ON;", nullptr, nullptr, nullptr
+    );
 
     const char* createTable =
         "CREATE TABLE IF NOT EXISTS students ("
@@ -399,8 +495,10 @@ int main() {
         !initializeGrades(db) ||
         !initializeAttendance(db) ||
         !initializeReports(db)) {
+
         cerr << "Database initialization failed: "
              << sqlite3_errmsg(db) << '\n';
+
         sqlite3_close(db);
         return 1;
     }
@@ -411,17 +509,21 @@ int main() {
     }
 
     string username, role;
+
     while (!loginUser(db, username, role)) {
         if (!cin || cin.eof()) {
             sqlite3_close(db);
             return 1;
         }
+
         cout << "Please try logging in again.\n";
     }
 
-    // Normalize roles for the existing student update/delete functions.
-    for (char& c : role)
-        c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+    for (char& c : role) {
+        c = static_cast<char>(
+            tolower(static_cast<unsigned char>(c))
+        );
+    }
 
     int choice = -1;
 
@@ -449,78 +551,92 @@ int main() {
             cout << "6. Create user account\n";
 
         if (hasPermission(role, Permission::ManageSubjects)) {
-    cout << "7. Add subject\n";
+            cout << "7. Add subject\n";
             cout << "8. List subjects\n";
+            cout << "9. Update subject metadata\n";
         }
 
         if (hasPermission(role, Permission::AddGrades))
-            cout << "9. Add grade\n";
+            cout << "10. Add grade\n";
 
         if (hasPermission(role, Permission::ViewAllGrades) ||
             hasPermission(role, Permission::ViewOwnGrades))
-            cout << "10. View grades\n";
+            cout << "11. View grades\n";
 
         if (hasPermission(role, Permission::RecordAttendance))
-            cout << "11. Record attendance\n";
+            cout << "12. Record attendance\n";
 
         if (hasPermission(role, Permission::UpdateAttendance))
-            cout << "12. Update attendance\n";
+            cout << "13. Update attendance\n";
 
         if (hasPermission(role, Permission::ViewAllAttendance) ||
             hasPermission(role, Permission::ViewOwnAttendance))
-            cout << "13. View attendance\n";
+            cout << "14. View attendance\n";
 
         if (hasPermission(role, Permission::GenerateAcademicReport))
-            cout << "14. Generate academic report\n";
+            cout << "15. Generate academic report\n";
 
         if (hasPermission(role, Permission::ViewGradeSheet))
-            cout << "15. View grade sheet\n";
+            cout << "16. View grade sheet\n";
 
         if (hasPermission(role, Permission::ViewAttendanceSummary))
-            cout << "16. View attendance summary\n";
+            cout << "17. View attendance summary\n";
+
+        if (hasPermission(role, Permission::ViewAllGrades) ||
+            hasPermission(role, Permission::ViewOwnGrades)) {
+            cout << "18. Calculate semester GPA\n";
+            cout << "19. Calculate CGPA\n";
+        }
 
         cout << "0. Exit\n";
-
         cout << "Choose: ";
 
         if (!(cin >> choice)) {
             if (cin.eof()) break;
+
             cin.clear();
             cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
             cout << "Please enter a valid number.\n";
             continue;
         }
+
         cin.ignore(numeric_limits<streamsize>::max(), '\n');
 
         switch (choice) {
             case 1:
                 if (hasPermission(role, Permission::CreateStudent))
                     createStudent(db);
-                else cout << "Access denied.\n";
+                else
+                    cout << "Access denied.\n";
                 break;
 
             case 2:
                 if (hasPermission(role, Permission::ViewStudents))
                     viewStudents(db);
-                else cout << "Access denied.\n";
+                else
+                    cout << "Access denied.\n";
                 break;
 
             case 3:
                 if (hasPermission(role, Permission::SearchStudents))
                     searchStudent(db);
-                else cout << "Access denied.\n";
+                else
+                    cout << "Access denied.\n";
                 break;
 
             case 4:
                 if (hasPermission(role, Permission::UpdateStudent))
                     updateStudent(db, role);
-                else cout << "Access denied.\n";
+                else
+                    cout << "Access denied.\n";
                 break;
 
             case 5:
                 if (hasPermission(role, Permission::DeleteStudent))
                     deleteStudent(db, role);
-                else cout << "Access denied.\n";
+                else
+                    cout << "Access denied.\n";
                 break;
 
             case 6: {
@@ -530,10 +646,13 @@ int main() {
                 }
 
                 string newUsername, password, newRole;
+
                 cout << "New username: ";
                 if (!getline(cin, newUsername)) break;
+
                 cout << "New password (10-128 characters): ";
                 if (!getline(cin, password)) break;
+
                 cout << "Role (Admin/Faculty/Staff/Student): ";
                 if (!getline(cin, newRole)) break;
 
@@ -544,22 +663,32 @@ int main() {
             case 7:
                 if (hasPermission(role, Permission::ManageSubjects))
                     addSubject(db);
-                else cout << "Access denied.\n";
+                else
+                    cout << "Access denied.\n";
                 break;
 
             case 8:
                 if (hasPermission(role, Permission::ManageSubjects))
                     listSubjects(db);
-                else cout << "Access denied.\n";
+                else
+                    cout << "Access denied.\n";
                 break;
 
             case 9:
-                if (hasPermission(role, Permission::AddGrades))
-                    addGrade(db);
-                else cout << "Access denied.\n";
+                if (hasPermission(role, Permission::ManageSubjects))
+                    updateSubjectMetadata(db);
+                else
+                    cout << "Access denied.\n";
                 break;
 
-            case 10: {
+            case 10:
+                if (hasPermission(role, Permission::AddGrades))
+                    addGrade(db);
+                else
+                    cout << "Access denied.\n";
+                break;
+
+            case 11: {
                 if (!hasPermission(role, Permission::ViewAllGrades) &&
                     !hasPermission(role, Permission::ViewOwnGrades)) {
                     cout << "Access denied.\n";
@@ -567,8 +696,8 @@ int main() {
                 }
 
                 string studentId;
+
                 if (!hasPermission(role, Permission::ViewAllGrades)) {
-                    // Users without ViewAllGrades must view only their own grades
                     studentId = username;
                 } else {
                     cout << "Student ID: ";
@@ -577,31 +706,40 @@ int main() {
                 }
 
                 sqlite3_stmt* stmt = nullptr;
+
                 const char* sql =
                     "SELECT s.subject_code, s.subject_name, g.marks "
                     "FROM grades g JOIN subjects s "
                     "ON s.subject_id = g.subject_id "
                     "WHERE g.student_id = ? ORDER BY s.subject_code;";
 
-                if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr)
-                    != SQLITE_OK) {
+                if (sqlite3_prepare_v2(
+                        db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
                     cout << "Database error: "
                          << sqlite3_errmsg(db) << '\n';
                     break;
                 }
 
-                sqlite3_bind_text(stmt, 1, studentId.c_str(),
-                                  -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(
+                    stmt, 1, studentId.c_str(), -1, SQLITE_TRANSIENT
+                );
 
                 cout << "\n--- Grades for " << studentId << " ---\n";
+
                 bool found = false;
                 int rc;
 
                 while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
                     found = true;
-                    const unsigned char* code = sqlite3_column_text(stmt, 0);
-                    const unsigned char* name = sqlite3_column_text(stmt, 1);
-                    cout << (code ? reinterpret_cast<const char*>(code) : "N/A") << " | "
+
+                    const unsigned char* code =
+                        sqlite3_column_text(stmt, 0);
+
+                    const unsigned char* name =
+                        sqlite3_column_text(stmt, 1);
+
+                    cout << (code ? reinterpret_cast<const char*>(code) : "N/A")
+                         << " | "
                          << (name ? reinterpret_cast<const char*>(name) : "N/A")
                          << " | Marks: "
                          << sqlite3_column_double(stmt, 2) << '\n';
@@ -609,6 +747,7 @@ int main() {
 
                 if (!found && rc == SQLITE_DONE)
                     cout << "No grades found.\n";
+
                 if (rc != SQLITE_DONE)
                     cout << "Error reading grades.\n";
 
@@ -616,42 +755,114 @@ int main() {
                 break;
             }
 
-            case 11:
+            case 12:
                 if (hasPermission(role, Permission::RecordAttendance))
                     recordAttendance(db);
-                else cout << "Access denied.\n";
-                break;
-
-            case 12:
-                if (hasPermission(role, Permission::UpdateAttendance))
-                    updateAttendance(db);
-                else cout << "Access denied.\n";
+                else
+                    cout << "Access denied.\n";
                 break;
 
             case 13:
-                if (hasPermission(role, Permission::ViewAllAttendance) ||
-                    hasPermission(role, Permission::ViewOwnAttendance))
-                    viewAttendance(db, username, role);
-                else cout << "Access denied.\n";
+                if (hasPermission(role, Permission::UpdateAttendance))
+                    updateAttendance(db);
+                else
+                    cout << "Access denied.\n";
                 break;
 
             case 14:
-                if (hasPermission(role, Permission::GenerateAcademicReport))
-                    generateAcademicReport(db, role, username);
-                else cout << "Access denied.\n";
+                if (hasPermission(role, Permission::ViewAllAttendance) ||
+                    hasPermission(role, Permission::ViewOwnAttendance))
+                    viewAttendance(db, username, role);
+                else
+                    cout << "Access denied.\n";
                 break;
 
             case 15:
-                if (hasPermission(role, Permission::ViewGradeSheet))
-                    viewGradeSheet(db, role, username);
-                else cout << "Access denied.\n";
+                if (hasPermission(role, Permission::GenerateAcademicReport))
+                    generateAcademicReport(db, role, username);
+                else
+                    cout << "Access denied.\n";
                 break;
 
             case 16:
+                if (hasPermission(role, Permission::ViewGradeSheet))
+                    viewGradeSheet(db, role, username);
+                else
+                    cout << "Access denied.\n";
+                break;
+
+            case 17:
                 if (hasPermission(role, Permission::ViewAttendanceSummary))
                     viewAttendanceSummary(db, role, username);
-                else cout << "Access denied.\n";
+                else
+                    cout << "Access denied.\n";
                 break;
+
+            case 18: {
+                if (!hasPermission(role, Permission::ViewAllGrades) &&
+                    !hasPermission(role, Permission::ViewOwnGrades)) {
+                    cout << "Access denied.\n";
+                    break;
+                }
+
+                string studentId;
+                int semester;
+                double gpa = 0.0;
+
+                if (hasPermission(role, Permission::ViewAllGrades)) {
+                    cout << "Student ID: ";
+                    if (!getline(cin, studentId)) break;
+                    studentId = trim(studentId);
+                } else {
+                    studentId = username;
+                }
+
+                cout << "Semester (1-8): ";
+
+                if (!(cin >> semester)) {
+                    cin.clear();
+                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+                    cout << "Invalid semester.\n";
+                    break;
+                }
+
+                cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
+                if (calculateSemesterGPA(db, studentId, semester, gpa)) {
+                    cout << "Semester GPA: " << gpa << '\n';
+                } else {
+                    cout << "GPA unavailable. Check grades, credits and semester metadata.\n";
+                }
+
+                break;
+            }
+
+            case 19: {
+                if (!hasPermission(role, Permission::ViewAllGrades) &&
+                    !hasPermission(role, Permission::ViewOwnGrades)) {
+                    cout << "Access denied.\n";
+                    break;
+                }
+
+                string studentId;
+                double cgpa = 0.0;
+
+                if (hasPermission(role, Permission::ViewAllGrades)) {
+                    cout << "Student ID: ";
+                    if (!getline(cin, studentId)) break;
+                    studentId = trim(studentId);
+                } else {
+                    studentId = username;
+                }
+
+                if (calculateCGPA(db, studentId, cgpa)) {
+                    cout << "Cumulative CGPA: " << cgpa << '\n';
+                } else {
+                    cout << "CGPA unavailable. Check grades, credits and semester metadata.\n";
+                }
+
+                break;
+            }
 
             case 0:
                 cout << "Application closed.\n";
@@ -660,6 +871,7 @@ int main() {
             default:
                 cout << "Invalid option.\n";
         }
+
     } while (choice != 0);
 
     sqlite3_close(db);
