@@ -1,0 +1,75 @@
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build and Publish Windows Release
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSYS2 UCRT64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-sqlite3
+            zip
+
+      - name: Build Windows executable
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -O2 -Iinclude -Isrc \
+              $(find . -name '*.cpp' -not -path './tests/*') \
+              -lsqlite3 -lbcrypt -o student_system.exe
+
+      - name: Collect runtime dependencies
+        run: |
+          mkdir -p release
+
+          cp student_system.exe release/
+
+          ldd student_system.exe | \
+            awk '{for (i=1; i<=NF; i++) if ($i ~ /^\/ucrt64\/bin\/.*\.dll$/) print $i}' | \
+            sort -u > runtime-dlls.txt
+
+          if [ ! -s runtime-dlls.txt ]; then
+            echo "ERROR: Runtime DLL dependencies were not found."
+            exit 1
+          fi
+
+          while IFS= read -r dll; do
+            test -f "$dll"
+            cp "$dll" release/
+          done < runtime-dlls.txt
+
+          cp README.md release/
+
+          ls -lh release/
+
+      - name: Create Windows release ZIP
+        run: |
+          cd release
+          zip -r ../StudentRecordSystem-Windows.zip .
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: StudentRecordSystem-Windows.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
