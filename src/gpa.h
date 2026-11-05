@@ -1,8 +1,8 @@
 
 #ifndef GPA_H
 #define GPA_H
-#include<string>
 
+#include <string>
 #include "sqlite3.h"
 
 int convertMarksToGradePoints(double marks);
