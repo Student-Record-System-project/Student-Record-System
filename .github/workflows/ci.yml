@@ -11,9 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  # ============================================================
   # Linux and macOS CI
-  # ============================================================
   build-and-test:
     name: Build & Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -61,9 +59,7 @@ jobs:
           chmod +x verify_reports.sh
           ./verify_reports.sh
 
-  # ============================================================
   # Windows CI using MSYS2 UCRT64
-  # ============================================================
   windows-build-and-test:
     name: Build & Test (Windows)
     runs-on: windows-latest
@@ -84,6 +80,7 @@ jobs:
           install: >-
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-sqlite3
+            zip
 
       - name: Build Windows executable
         run: |
@@ -91,11 +88,30 @@ jobs:
               $(find . -name '*.cpp' -not -path './tests/*') \
               -lsqlite3 -lbcrypt -o student_system.exe
 
+      - name: Inspect Windows runtime dependencies
+        run: |
+          ldd student_system.exe
+
       - name: Prepare Windows runtime files
         run: |
-          cp /ucrt64/bin/sqlite3.dll ./sqlite3.dll
-          test -f student_system.exe
-          test -f sqlite3.dll
+          mkdir -p release
+          cp student_system.exe release/
+
+          ldd student_system.exe | \
+            awk '{for (i=1; i<=NF; i++) if ($i ~ /^\/ucrt64\/bin\/.*\.dll$/) print $i}' | \
+            sort -u > runtime-dlls.txt
+
+          if [ ! -s runtime-dlls.txt ]; then
+            echo "ERROR: No UCRT64 runtime DLL dependencies found."
+            exit 1
+          fi
+
+          while IFS= read -r dll; do
+            test -f "$dll"
+            cp "$dll" release/
+          done < runtime-dlls.txt
+
+          ls -lh release/
 
       - name: Run attendance acceptance tests
         run: |
@@ -109,9 +125,6 @@ jobs:
 
       - name: Package Windows application
         run: |
-          mkdir -p release
-          cp student_system.exe release/
-          cp sqlite3.dll release/
           cp README.md release/
           cd release
           zip -r ../StudentRecordSystem-Windows.zip .
