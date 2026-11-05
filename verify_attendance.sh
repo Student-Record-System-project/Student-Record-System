@@ -1,15 +1,6 @@
 
 #!/usr/bin/env bash
-# ==============================================================================
-# verify_attendance.sh - Acceptance test script for SRS-F-012, 013, 014
-#
-# Tests:
-#   TC-ATT-01: Record attendance
-#   TC-ATT-02: Update attendance
-#   TC-ATT-03: Calculate attendance percentage
-#   RBAC: Student cannot update attendance
-# ==============================================================================
-
+# Attendance Module Acceptance Tests
 set -euo pipefail
 
 echo "=========================================================="
@@ -24,23 +15,21 @@ if [ -f "./student_system" ]; then
 elif [ -f "./student_system.exe" ]; then
     APP="./student_system.exe"
 else
-    echo "Error: student_system binary not found."
+    echo "ERROR: student_system binary not found."
     exit 1
 fi
 
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
-echo "1. Initializing isolated test environment..."
 mkdir -p "$TEMP_DIR/data"
 cp "$APP" "$TEMP_DIR/"
 APP_BIN="$(basename "$APP")"
-
 cd "$TEMP_DIR"
 
-echo "2. Seeding initial accounts and subject..."
+echo "1. Creating admin, faculty, student and subject..."
 
-cat << 'EOF' | "./$APP_BIN" > seed.log 2>&1
+cat <<'EOF' | "./$APP_BIN" > seed.log 2>&1
 admin
 AdminPass123!
 admin
@@ -60,6 +49,8 @@ alice@example.com
 7
 CS101
 Computer Science
+3
+1
 0
 EOF
 
@@ -69,11 +60,9 @@ if [ ! -f "data/student_records.db" ]; then
     exit 1
 fi
 
-echo "PASS: Initial data seeded."
+echo "2. Recording attendance as faculty..."
 
-echo "3. Testing attendance recording..."
-
-cat << 'EOF' | "./$APP_BIN" > record.log 2>&1
+cat <<'EOF' | "./$APP_BIN" > record.log 2>&1
 faculty1
 FacultyPass123!
 12
@@ -97,9 +86,9 @@ else
     exit 1
 fi
 
-echo "4. Testing attendance percentage and RBAC..."
+echo "3. Checking student attendance percentage and RBAC..."
 
-cat << 'EOF' | "./$APP_BIN" > student_view.log 2>&1
+cat <<'EOF' | "./$APP_BIN" > student_view.log 2>&1
 STU001
 StudentPass123!
 14
@@ -111,22 +100,22 @@ EOF
 if grep -q "50.00%" student_view.log; then
     echo "PASS: Initial attendance percentage is 50%."
 else
-    echo "FAIL: Initial attendance percentage."
+    echo "FAIL: Expected 50% attendance."
     cat student_view.log
     exit 1
 fi
 
 if grep -q "Access denied" student_view.log; then
-    echo "PASS: Student update access correctly denied."
+    echo "PASS: Student update permission correctly denied."
 else
     echo "FAIL: Student RBAC verification."
     cat student_view.log
     exit 1
 fi
 
-echo "5. Testing attendance update..."
+echo "4. Updating attendance as faculty..."
 
-cat << 'EOF' | "./$APP_BIN" > update.log 2>&1
+cat <<'EOF' | "./$APP_BIN" > update.log 2>&1
 faculty1
 FacultyPass123!
 13
@@ -145,9 +134,9 @@ else
     exit 1
 fi
 
-echo "6. Verifying updated attendance percentage..."
+echo "5. Verifying updated attendance percentage..."
 
-cat << 'EOF' | "./$APP_BIN" > student_after_update.log 2>&1
+cat <<'EOF' | "./$APP_BIN" > student_after_update.log 2>&1
 STU001
 StudentPass123!
 14
@@ -158,7 +147,7 @@ EOF
 if grep -q "100.00%" student_after_update.log; then
     echo "PASS: Updated attendance percentage is 100%."
 else
-    echo "FAIL: Updated attendance percentage."
+    echo "FAIL: Expected 100% attendance."
     cat student_after_update.log
     exit 1
 fi
@@ -166,5 +155,3 @@ fi
 echo "=========================================================="
 echo "ALL ATTENDANCE ACCEPTANCE TESTS PASSED"
 echo "=========================================================="
-
-exit 0
