@@ -1,24 +1,28 @@
+
 name: CI
 
 on:
   push:
-    branches: [ main, 'feat/**' ]
+    branches: [main, 'feat/**']
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
+  # ============================================================
+  # Linux and macOS CI
+  # ============================================================
   build-and-test:
     name: Build & Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+
     strategy:
       fail-fast: false
       matrix:
-        # Both ubuntu-latest and macos-latest are retained in the matrix to verify cross-platform
-        # portability across Linux and macOS. Execution duration is low (< 2 minutes per runner).
         os: [ubuntu-latest, macos-latest]
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,12 +31,12 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libsqlite3-dev sqlite3
+          sudo apt-get install -y g++ libsqlite3-dev sqlite3
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install sqlite || true
+          brew install sqlite
 
       - name: Build student_system
         run: |
@@ -56,3 +60,65 @@ jobs:
         run: |
           chmod +x verify_reports.sh
           ./verify_reports.sh
+
+  # ============================================================
+  # Windows CI using MSYS2 UCRT64
+  # ============================================================
+  windows-build-and-test:
+    name: Build & Test (Windows)
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSYS2 UCRT64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-sqlite3
+
+      - name: Build Windows executable
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -O2 -Iinclude -Isrc \
+              $(find . -name '*.cpp' -not -path './tests/*') \
+              -lsqlite3 -lbcrypt -o student_system.exe
+
+      - name: Prepare Windows runtime files
+        run: |
+          cp /ucrt64/bin/sqlite3.dll ./sqlite3.dll
+          test -f student_system.exe
+          test -f sqlite3.dll
+
+      - name: Run attendance acceptance tests
+        run: |
+          chmod +x verify_attendance.sh
+          ./verify_attendance.sh
+
+      - name: Run academic reports acceptance tests
+        run: |
+          chmod +x verify_reports.sh
+          ./verify_reports.sh
+
+      - name: Package Windows application
+        run: |
+          mkdir -p release
+          cp student_system.exe release/
+          cp sqlite3.dll release/
+          cp README.md release/
+          cd release
+          zip -r ../StudentRecordSystem-Windows.zip .
+
+      - name: Upload Windows application package
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudentRecordSystem-Windows
+          path: StudentRecordSystem-Windows.zip
+          retention-days: 30
