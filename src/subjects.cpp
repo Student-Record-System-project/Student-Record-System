@@ -201,3 +201,66 @@ void listSubjects(sqlite3* db) {
 
     sqlite3_finalize(stmt);
 }
+
+void updateSubjectMetadata(sqlite3* db) {
+    int subjectId;
+    double credits;
+    int semester;
+
+    cout << "Enter subject ID: ";
+
+    if (!(cin >> subjectId) || subjectId <= 0) {
+        cout << "Invalid subject ID.\n";
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        return;
+    }
+
+    cout << "Enter credits: ";
+
+    if (!(cin >> credits) || credits <= 0) {
+        cout << "Enter valid positive credits.\n";
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        return;
+    }
+
+    cout << "Enter semester (1-8): ";
+
+    if (!(cin >> semester) || semester < 1 || semester > 8) {
+        cout << "Invalid semester.\n";
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        return;
+    }
+
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
+    sqlite3_stmt* stmt = nullptr;
+
+    const char* sql =
+        "UPDATE subjects SET credits = ?, semester = ? "
+        "WHERE subject_id = ?;";
+
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        cout << "Database error: " << sqlite3_errmsg(db) << '\n';
+        return;
+    }
+
+    sqlite3_bind_double(stmt, 1, credits);
+    sqlite3_bind_int(stmt, 2, semester);
+    sqlite3_bind_int(stmt, 3, subjectId);
+
+    int rc = sqlite3_step(stmt);
+
+    if (rc == SQLITE_DONE && sqlite3_changes(db) > 0) {
+        cout << "Subject metadata updated successfully.\n";
+    } else if (rc == SQLITE_DONE) {
+        cout << "Subject ID not found or metadata unchanged.\n";
+    } else {
+        cout << "Update failed: " << sqlite3_errmsg(db) << '\n';
+    }
+
+    sqlite3_finalize(stmt);
+}
+
