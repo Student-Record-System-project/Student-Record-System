@@ -76,7 +76,7 @@ double calculateAttendancePercentage(int presentCount, int totalCount, int lateC
     return (static_cast<double>(effectivePresent) / totalCount) * 100.0;
 }
 
-double calculateAttendancePercentage(sqlite3* db, const std::string& studentId, int subjectId) {
+double calculateAttendancePercentage(sqlite3* db, const std::string& studentId, int subjectId, bool* ok) {
     sqlite3_stmt* stmt = nullptr;
     string sql;
     if (subjectId > 0) {
@@ -86,6 +86,7 @@ double calculateAttendancePercentage(sqlite3* db, const std::string& studentId, 
     }
 
     if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+        if (ok) *ok = false;
         return 0.0;
     }
 
@@ -110,7 +111,12 @@ double calculateAttendancePercentage(sqlite3* db, const std::string& studentId, 
     }
     sqlite3_finalize(stmt);
 
+    if (ok) *ok = (total > 0);
     return calculateAttendancePercentage(present, total, late);
+}
+
+double calculateAttendancePercentage(sqlite3* db, const std::string& studentId, int subjectId) {
+    return calculateAttendancePercentage(db, studentId, subjectId, nullptr);
 }
 
 void recordAttendance(sqlite3* db) {

@@ -9,7 +9,7 @@
 using namespace std;
 
 static bool validUsername(const string& username) {
-    if (username.size() < 3 || username.size() > 50) return false;
+    if (username.size() < 2 || username.size() > 50) return false;
     for (unsigned char c : username) {
         if (!isalnum(c) && c != '_' && c != '-') return false;
     }
@@ -49,7 +49,7 @@ bool initializeAuth(sqlite3* db) {
 bool createUser(sqlite3* db, const string& username,
                 const string& password, const string& role) {
     if (!validUsername(username)) {
-        cout << "Username must be 3-50 letters, digits, _ or -.\n";
+        cout << "Username must be 2-50 letters, digits, _ or -.\n";
         return false;
     }
     if (password.size() < 10 || password.size() > 128) {
