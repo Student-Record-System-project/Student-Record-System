@@ -50,7 +50,8 @@ bool initializeAuth(sqlite3* db) {
 }
 
 bool createUser(sqlite3* db, const string& username,
-                const string& password, const string& role) {
+                const string& password, const string& role,
+                const string& createdBy) {
     if (!validUsername(username)) {
         cout << "Username must be 2-50 letters, digits, _ or -.\n";
         return false;
@@ -89,6 +90,11 @@ bool createUser(sqlite3* db, const string& username,
     if (rc != SQLITE_DONE) {
         cout << "Account creation failed (username may already exist).\n";
         return false;
+    }
+
+    if (!logAuditEvent(db, createdBy, "USER_CREATED", username,
+                       "Role: " + role)) {
+        cerr << "Warning: account creation audit event failed.\n";
     }
 
     cout << "Account created successfully.\n";

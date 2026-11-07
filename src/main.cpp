@@ -5,6 +5,7 @@
 #include <cctype>
 
 #include "auth.h"
+#include "audit.h"
 #include "subjects.h"
 #include "grades.h"
 #include "attendance.h"
@@ -84,7 +85,7 @@ bool bindText(
 // Create student
 // ============================================================
 
-bool createStudent(sqlite3* db) {
+bool createStudent(sqlite3* db, const string& actor) {
     string id, name, email;
 
     cout << "\nStudent ID: ";
@@ -135,6 +136,10 @@ bool createStudent(sqlite3* db) {
     int result = sqlite3_step(stmt);
 
     if (result == SQLITE_DONE) {
+        if (!logAuditEvent(db, actor, "STUDENT_CREATED", id,
+                           "Student record created")) {
+            cerr << "Warning: student creation audit event failed.\n";
+        }
         cout << "Student record created successfully.\n";
     } else if (result == SQLITE_CONSTRAINT ||
                result == SQLITE_CONSTRAINT_PRIMARYKEY ||
@@ -247,7 +252,7 @@ void searchStudent(sqlite3* db) {
 // Update student record
 // ============================================================
 
-bool updateStudent(sqlite3* db, const string& role) {
+bool updateStudent(sqlite3* db, const string& role, const string& actor) {
     if (!hasPermission(role, Permission::UpdateStudent)) {
         cout << "Access denied: only admins and teachers can update records.\n";
         return false;
@@ -347,6 +352,11 @@ bool updateStudent(sqlite3* db, const string& role) {
         return false;
     }
 
+    if (!logAuditEvent(db, actor, "STUDENT_UPDATED", oldId,
+                       "Student record updated")) {
+        cerr << "Warning: student update audit event failed.\n";
+    }
+
     cout << "\nStudent record updated successfully.\n"
          << "  ID   : " << oldId << '\n'
          << "  Name : " << newName << '\n'
@@ -359,7 +369,7 @@ bool updateStudent(sqlite3* db, const string& role) {
 // Delete student record
 // ============================================================
 
-bool deleteStudent(sqlite3* db, const string& role) {
+bool deleteStudent(sqlite3* db, const string& role, const string& actor) {
     if (!hasPermission(role, Permission::DeleteStudent)) {
         cout << "Access denied: only admins and teachers can delete records.\n";
         return false;
@@ -456,6 +466,11 @@ bool deleteStudent(sqlite3* db, const string& role) {
 
     sqlite3_exec(db, "COMMIT;", nullptr, nullptr, nullptr);
 
+    if (!logAuditEvent(db, actor, "STUDENT_DELETED", id,
+                       "Student record deleted")) {
+        cerr << "Warning: student deletion audit event failed.\n";
+    }
+
     cout << "\nStudent record deleted successfully.\n"
          << "  Removed ID   : " << id << '\n'
          << "  Removed Name : " << curName << '\n'
@@ -508,26 +523,31 @@ int main() {
         return 1;
     }
 
-    string username, role;
+    bool applicationRunning = true;
 
-    while (!loginUser(db, username, role)) {
-        if (!cin || cin.eof()) {
-            sqlite3_close(db);
-            return 1;
+    while (applicationRunning) {
+        string username, role;
+
+        while (!loginUser(db, username, role)) {
+            if (!cin || cin.eof()) {
+                applicationRunning = false;
+                break;
+            }
+
+            cout << "Please try logging in again.\n";
         }
 
-        cout << "Please try logging in again.\n";
-    }
+        if (!applicationRunning) break;
 
-    for (char& c : role) {
-        c = static_cast<char>(
-            tolower(static_cast<unsigned char>(c))
-        );
-    }
+        for (char& c : role) {
+            c = static_cast<char>(
+                tolower(static_cast<unsigned char>(c))
+            );
+        }
 
-    int choice = -1;
+        int choice = -1;
 
-    do {
+        do {
         cout << "\n=== Student Record System ===\n"
              << "Logged in as: " << username
              << " | Role: " << role << '\n';
@@ -588,11 +608,15 @@ int main() {
             cout << "19. Calculate CGPA\n";
         }
 
+        cout << "20. Logout\n";
         cout << "0. Exit\n";
         cout << "Choose: ";
 
         if (!(cin >> choice)) {
-            if (cin.eof()) break;
+            if (cin.eof()) {
+                choice = 0;
+                break;
+            }
 
             cin.clear();
             cin.ignore(numeric_limits<streamsize>::max(), '\n');
@@ -606,7 +630,7 @@ int main() {
         switch (choice) {
             case 1:
                 if (hasPermission(role, Permission::CreateStudent))
-                    createStudent(db);
+                    createStudent(db, username);
                 else
                     cout << "Access denied.\n";
                 break;
@@ -627,14 +651,14 @@ int main() {
 
             case 4:
                 if (hasPermission(role, Permission::UpdateStudent))
-                    updateStudent(db, role);
+                    updateStudent(db, role, username);
                 else
                     cout << "Access denied.\n";
                 break;
 
             case 5:
                 if (hasPermission(role, Permission::DeleteStudent))
-                    deleteStudent(db, role);
+                    deleteStudent(db, role, username);
                 else
                     cout << "Access denied.\n";
                 break;
@@ -656,13 +680,13 @@ int main() {
                 cout << "Role (Admin/Faculty/Staff/Student): ";
                 if (!getline(cin, newRole)) break;
 
-                createUser(db, newUsername, password, newRole);
+                createUser(db, newUsername, password, newRole, username);
                 break;
             }
 
             case 7:
                 if (hasPermission(role, Permission::ManageSubjects))
-                    addSubject(db);
+                    addSubject(db, username);
                 else
                     cout << "Access denied.\n";
                 break;
@@ -676,14 +700,14 @@ int main() {
 
             case 9:
                 if (hasPermission(role, Permission::ManageSubjects))
-                    updateSubjectMetadata(db);
+                    updateSubjectMetadata(db, username);
                 else
                     cout << "Access denied.\n";
                 break;
 
             case 10:
                 if (hasPermission(role, Permission::AddGrades))
-                    addGrade(db);
+                    addGrade(db, username);
                 else
                     cout << "Access denied.\n";
                 break;
@@ -757,14 +781,14 @@ int main() {
 
             case 12:
                 if (hasPermission(role, Permission::RecordAttendance))
-                    recordAttendance(db);
+                    recordAttendance(db, username);
                 else
                     cout << "Access denied.\n";
                 break;
 
             case 13:
                 if (hasPermission(role, Permission::UpdateAttendance))
-                    updateAttendance(db);
+                    updateAttendance(db, username);
                 else
                     cout << "Access denied.\n";
                 break;
@@ -864,6 +888,14 @@ int main() {
                 break;
             }
 
+            case 20:
+                if (!logAuditEvent(db, username, "LOGOUT_SUCCESS",
+                                   username, "User logged out")) {
+                    cerr << "Warning: logout audit event failed.\n";
+                }
+                cout << "Logged out successfully.\n";
+                break;
+
             case 0:
                 cout << "Application closed.\n";
                 break;
@@ -872,7 +904,12 @@ int main() {
                 cout << "Invalid option.\n";
         }
 
-    } while (choice != 0);
+        } while (choice != 0 && choice != 20);
+
+        if (choice == 0) {
+            applicationRunning = false;
+        }
+    }
 
     sqlite3_close(db);
     return 0;

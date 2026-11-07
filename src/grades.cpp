@@ -40,7 +40,7 @@ bool initializeGrades(sqlite3* db) {
     return true;
 }
 
-void addGrade(sqlite3* db) {
+void addGrade(sqlite3* db, const std::string& actor) {
     string studentId;
     string subjectInput;
     double marks;
@@ -99,7 +99,11 @@ void addGrade(sqlite3* db) {
         int rc = sqlite3_step(stmt);
 
         if (rc == SQLITE_DONE) {
-            logAuditEvent(db, "SYSTEM", "GRADE_ADDED", studentId + "/" + std::to_string(subjectId), "Marks: " + std::to_string(marks));
+            if (!logAuditEvent(db, actor, "GRADE_ADDED",
+                                studentId + "/" + std::to_string(subjectId),
+                                "Marks: " + std::to_string(marks))) {
+                cerr << "Warning: grade audit event failed.\n";
+            }
             cout << "Grade added successfully.\n";
         } else {
             cout << "Could not add grade. Check that the student and subject "
