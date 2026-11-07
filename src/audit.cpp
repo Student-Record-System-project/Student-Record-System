@@ -15,7 +15,16 @@ bool initializeAudit(sqlite3* db) {
         "CREATE INDEX IF NOT EXISTS idx_audit_actor "
         "ON audit_logs(actor);";
 
-    return sqlite3_exec(db, sql, nullptr, nullptr, nullptr) == SQLITE_OK;
+    if (sqlite3_exec(db, sql, nullptr, nullptr, nullptr) != SQLITE_OK) {
+        return false;
+    }
+
+    const char* retentionSql =
+        "DELETE FROM audit_logs "
+        "WHERE event_time < datetime('now', '-5 years');";
+
+    return sqlite3_exec(db, retentionSql, nullptr, nullptr, nullptr)
+           == SQLITE_OK;
 }
 
 bool logAuditEvent(
