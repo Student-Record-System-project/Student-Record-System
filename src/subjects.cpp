@@ -1,5 +1,6 @@
 
 #include "subjects.h"
+#include "audit.h"
 
 #include <iostream>
 #include <string>
@@ -82,7 +83,7 @@ bool initializeSubjects(sqlite3* db) {
     return true;
 }
 
-void addSubject(sqlite3* db) {
+void addSubject(sqlite3* db, const std::string& actor) {
     string code, name;
     double credits;
     int semester;
@@ -137,6 +138,11 @@ void addSubject(sqlite3* db) {
     int rc = sqlite3_step(stmt);
 
     if (rc == SQLITE_DONE) {
+        if (!logAuditEvent(db, actor, "SUBJECT_ADDED",
+                            std::to_string(static_cast<long long>(sqlite3_last_insert_rowid(db))),
+                            "Code: " + code + ", Name: " + name)) {
+            cerr << "Warning: subject creation audit event failed.\n";
+        }
         cout << "Subject added successfully. ID: "
              << sqlite3_last_insert_rowid(db) << '\n';
     } else {
@@ -202,7 +208,7 @@ void listSubjects(sqlite3* db) {
     sqlite3_finalize(stmt);
 }
 
-void updateSubjectMetadata(sqlite3* db) {
+void updateSubjectMetadata(sqlite3* db, const std::string& actor) {
     int subjectId;
     double credits;
     int semester;
@@ -254,6 +260,12 @@ void updateSubjectMetadata(sqlite3* db) {
     int rc = sqlite3_step(stmt);
 
     if (rc == SQLITE_DONE && sqlite3_changes(db) > 0) {
+        if (!logAuditEvent(db, actor, "SUBJECT_UPDATED",
+                            std::to_string(subjectId),
+                            "Credits: " + std::to_string(credits) +
+                            ", Semester: " + std::to_string(semester))) {
+            cerr << "Warning: subject update audit event failed.\n";
+        }
         cout << "Subject metadata updated successfully.\n";
     } else if (rc == SQLITE_DONE) {
         cout << "Subject ID not found or metadata unchanged.\n";
