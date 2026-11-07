@@ -1,5 +1,6 @@
 #include "auth.h"
 #include "password_hash.h"
+#include "audit.h"
 
 #include <iostream>
 #include <cctype>
@@ -34,6 +35,7 @@ static bool execute(sqlite3* db, const char* sql) {
 }
 
 bool initializeAuth(sqlite3* db) {
+    if (!initializeAudit(db)) return false;
     return execute(db,
         "CREATE TABLE IF NOT EXISTS users ("
         "user_id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -143,6 +145,7 @@ bool loginUser(sqlite3* db, string& username, string& role) {
 
     if (rc != SQLITE_ROW) {
         sqlite3_finalize(stmt);
+        logAuditEvent(db, "UNKNOWN", "LOGIN_FAILED", username, "Unknown username");
         cout << "Invalid username or password.\n";
         return false;
     }
@@ -157,12 +160,14 @@ bool loginUser(sqlite3* db, string& username, string& role) {
 
     sqlite3_int64 now = static_cast<sqlite3_int64>(time(nullptr));
     if (lockedUntil > now) {
+        logAuditEvent(db, username, "LOGIN_BLOCKED", username, "Attempt during account lockout");
         cout << "Account temporarily locked. Try again in "
              << (lockedUntil - now + 59) / 60 << " minute(s).\n";
         return false;
     }
 
     if (!verifyPassword(password, encoded)) {
+        logAuditEvent(db, username, "LOGIN_FAILED", username, "Incorrect password");
         ++failures;
         sqlite3_stmt* update = nullptr;
 
@@ -176,6 +181,7 @@ bool loginUser(sqlite3* db, string& username, string& role) {
                 sqlite3_step(update);
                 sqlite3_finalize(update);
             }
+            logAuditEvent(db, username, "ACCOUNT_LOCKED", username, "Five failed attempts; locked for 15 minutes");
             cout << "Five failed attempts. Account locked for 15 minutes.\n";
         } else {
             const char* updateSql =
@@ -202,6 +208,7 @@ bool loginUser(sqlite3* db, string& username, string& role) {
     }
 
     role = storedRole;
+    logAuditEvent(db, username, "LOGIN_SUCCESS", username, "Authentication successful");
     cout << "Login successful. Role: " << role << '\n';
     return true;
 }
