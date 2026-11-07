@@ -2,6 +2,7 @@
 #include "password_hash.h"
 #include "audit.h"
 
+#include "password_input.h"
 #include <iostream>
 #include <cctype>
 #include <ctime>
@@ -113,8 +114,8 @@ bool setupFirstAdmin(sqlite3* db) {
     string username, password;
     cout << "Create admin username: ";
     getline(cin, username);
-    cout << "Create admin password (input is visible): ";
-    getline(cin, password);
+    cout << "Create admin password: ";
+    password = readHiddenPassword();
 
     if (!createUser(db, username, password, "Admin")) {
         cout << "Administrator setup was not completed.\n";
@@ -127,8 +128,8 @@ bool loginUser(sqlite3* db, string& username, string& role) {
     string password;
     cout << "Username: ";
     getline(cin, username);
-    cout << "Password (input is visible): ";
-    getline(cin, password);
+    cout << "Password: ";
+    password = readHiddenPassword();
 
     sqlite3_stmt* stmt = nullptr;
     const char* sql =
