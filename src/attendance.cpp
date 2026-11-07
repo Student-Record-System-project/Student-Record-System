@@ -1,5 +1,6 @@
 #include "attendance.h"
 
+#include "audit.h"
 #include <iostream>
 #include <string>
 #include <iomanip>
@@ -207,6 +208,7 @@ void recordAttendance(sqlite3* db) {
 
     rc = sqlite3_step(stmt);
     if (rc == SQLITE_DONE) {
+        logAuditEvent(db, "SYSTEM", "ATTENDANCE_RECORDED", studentId + "/" + std::to_string(subjectId) + "/" + dateStr, "Status: " + normStatus);
         cout << "Attendance recorded successfully.\n";
     } else {
         cout << "Error: could not record attendance. An attendance record for this student, subject, and date may already exist.\n"
@@ -298,6 +300,7 @@ void updateAttendance(sqlite3* db) {
     sqlite3_finalize(stmt);
 
     if (rc == SQLITE_DONE && sqlite3_changes(db) > 0) {
+        logAuditEvent(db, "SYSTEM", "ATTENDANCE_UPDATED", studentId + "/" + std::to_string(subjectId) + "/" + dateStr, "New status: " + normStatus);
         cout << "Attendance updated successfully.\n";
     } else {
         cout << "Error: could not update attendance.\n"

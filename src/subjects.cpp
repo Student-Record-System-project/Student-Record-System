@@ -1,5 +1,6 @@
 
 #include "subjects.h"
+#include "audit.h"
 
 #include <iostream>
 #include <string>
@@ -137,6 +138,7 @@ void addSubject(sqlite3* db) {
     int rc = sqlite3_step(stmt);
 
     if (rc == SQLITE_DONE) {
+        logAuditEvent(db, "SYSTEM", "SUBJECT_ADDED", std::to_string(static_cast<long long>(sqlite3_last_insert_rowid(db))), "Code: " + code + ", Name: " + name);
         cout << "Subject added successfully. ID: "
              << sqlite3_last_insert_rowid(db) << '\n';
     } else {
@@ -254,6 +256,7 @@ void updateSubjectMetadata(sqlite3* db) {
     int rc = sqlite3_step(stmt);
 
     if (rc == SQLITE_DONE && sqlite3_changes(db) > 0) {
+        logAuditEvent(db, "SYSTEM", "SUBJECT_UPDATED", std::to_string(subjectId), "Credits: " + std::to_string(credits) + ", Semester: " + std::to_string(semester));
         cout << "Subject metadata updated successfully.\n";
     } else if (rc == SQLITE_DONE) {
         cout << "Subject ID not found or metadata unchanged.\n";
