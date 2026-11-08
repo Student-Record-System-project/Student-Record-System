@@ -42,6 +42,41 @@ jobs:
               $(find . -name '*.cpp' -not -path './tests/*') \
               -lsqlite3 -o student_system
 
+      - name: Compile standalone C++ tests
+        run: |
+          set -e
+          mkdir -p build/tests
+
+          g++ -std=c++17 -Wall -Wextra -Werror -Isrc \
+              tests/rbac_test.cpp \
+              -o build/tests/rbac_test
+
+          g++ -std=c++17 -Wall -Wextra -Werror -Iinclude -Isrc \
+              tests/audit_test.cpp src/audit.cpp \
+              -lsqlite3 -o build/tests/audit_test
+
+          g++ -std=c++17 -Wall -Wextra -Werror -Iinclude -Isrc \
+              tests/academic_validation_test.cpp \
+              src/subjects.cpp src/grades.cpp src/audit.cpp \
+              -lsqlite3 -o build/tests/academic_validation_test
+
+          g++ -std=c++17 -Wall -Wextra -Werror -Iinclude -Isrc \
+              tests/performance_test.cpp \
+              -lsqlite3 -o build/tests/performance_test
+
+          g++ -std=c++17 -Wall -Wextra -Werror -Iinclude \
+              tests/sqlite_test.cpp \
+              -lsqlite3 -o build/tests/sqlite_test
+
+      - name: Run standalone C++ tests
+        run: |
+          set -e
+          ./build/tests/rbac_test
+          ./build/tests/audit_test
+          ./build/tests/academic_validation_test
+          ./build/tests/performance_test
+          ./build/tests/sqlite_test
+
       - name: Upload compiled binary
         uses: actions/upload-artifact@v4
         with:
@@ -87,6 +122,41 @@ jobs:
           g++ -std=c++17 -Wall -Wextra -Werror -O2 -Iinclude -Isrc \
               $(find . -name '*.cpp' -not -path './tests/*') \
               -lsqlite3 -lbcrypt -o student_system.exe
+
+      - name: Compile standalone C++ tests
+        run: |
+          set -e
+          mkdir -p build/tests
+
+          g++ -std=c++17 -Wall -Wextra -Werror -Isrc \
+              tests/rbac_test.cpp \
+              -o build/tests/rbac_test.exe
+
+          g++ -std=c++17 -Wall -Wextra -Werror -Iinclude -Isrc \
+              tests/audit_test.cpp src/audit.cpp \
+              -lsqlite3 -o build/tests/audit_test.exe
+
+          g++ -std=c++17 -Wall -Wextra -Werror -Iinclude -Isrc \
+              tests/academic_validation_test.cpp \
+              src/subjects.cpp src/grades.cpp src/audit.cpp \
+              -lsqlite3 -o build/tests/academic_validation_test.exe
+
+          g++ -std=c++17 -Wall -Wextra -Werror -Iinclude -Isrc \
+              tests/performance_test.cpp \
+              -lsqlite3 -o build/tests/performance_test.exe
+
+          g++ -std=c++17 -Wall -Wextra -Werror -Iinclude \
+              tests/sqlite_test.cpp \
+              -lsqlite3 -o build/tests/sqlite_test.exe
+
+      - name: Run standalone C++ tests
+        run: |
+          set -e
+          ./build/tests/rbac_test.exe
+          ./build/tests/audit_test.exe
+          ./build/tests/academic_validation_test.exe
+          ./build/tests/performance_test.exe
+          ./build/tests/sqlite_test.exe
 
       - name: Inspect Windows runtime dependencies
         run: |
@@ -134,4 +204,68 @@ jobs:
         with:
           name: StudentRecordSystem-Windows
           path: StudentRecordSystem-Windows.zip
+          retention-days: 30
+  coverage:
+    name: Code Coverage (Ubuntu)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ libsqlite3-dev sqlite3 gcovr
+
+      - name: Build audit coverage test
+        run: |
+          mkdir -p build/coverage/audit
+
+          cd build/coverage/audit
+
+          g++ -std=c++17 -O0 -g --coverage \
+              -I../../../include -I../../../src \
+              ../../../tests/audit_test.cpp \
+              ../../../src/audit.cpp \
+              -lsqlite3 -o audit_test
+
+      - name: Build academic validation coverage test
+        run: |
+          mkdir -p build/coverage/academic
+
+          cd build/coverage/academic
+
+          g++ -std=c++17 -O0 -g --coverage \
+              -I../../../include -I../../../src \
+              ../../../tests/academic_validation_test.cpp \
+              ../../../src/subjects.cpp \
+              ../../../src/grades.cpp \
+              ../../../src/audit.cpp \
+              -lsqlite3 -o academic_validation_test
+
+      - name: Run audit coverage test
+        working-directory: build/coverage/audit
+        run: ./audit_test
+
+      - name: Run academic validation coverage test
+        working-directory: build/coverage/academic
+        run: ./academic_validation_test
+
+      - name: Generate coverage report
+        run: |
+          gcovr \
+            --root . \
+            --filter 'src/' \
+            --exclude 'src/main.cpp' \
+            --exclude-unreachable-branches \
+            --print-summary \
+            --xml-pretty \
+            --output coverage.xml
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-system-coverage
+          path: coverage.xml
           retention-days: 30
