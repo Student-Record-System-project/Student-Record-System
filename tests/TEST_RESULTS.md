@@ -3,34 +3,92 @@
 
 ## 1. Testing Environment
 
-- Operating system: Windows
-- Terminal: MSYS2 UCRT64
-- Compiler: GCC 16.2.0
-- Database: SQLite 3
-- Language standard: C++17
-- Compiler flags: -Wall -Wextra -Werror
+| Component | Configuration |
+|---|---|
+| Operating System | Windows |
+| Local Testing Terminal | MSYS2 UCRT64 |
+| Compiler | GCC 16.2.0 |
+| Programming Language | C++17 |
+| Database | SQLite 3 |
+| Compiler Flags | -Wall -Wextra -Werror |
+| CI Platform | GitHub Actions |
+| CI Operating Systems | Ubuntu, macOS and Windows |
 
-## 2. Standalone Test Execution Results
+## 2. Standalone Unit and Integration Test Results
 
-| Test program | Compilation | Execution | Result |
+Five standalone C++ test programs were compiled and executed successfully.
+
+| Test ID | Test Program | Description | Result |
 |---|---|---|---|
-| rbac_test.cpp | Successful | All permission checks passed | PASS |
-| audit_test.cpp | Successful | All audit checks passed | PASS |
-| academic_validation_test.cpp | Successful | All validation checks passed | PASS |
-| performance_test.cpp | Successful | All three benchmarks completed | PASS |
-| sqlite_test.cpp | Successful | All SQLite checks passed | PASS |
+| TC-RBAC | rbac_test.cpp | Role permissions, case-insensitive roles and unknown role handling | PASS |
+| TC-AUD | audit_test.cpp | Audit table initialization, event insertion and five-year retention | PASS |
+| TC-ACD | academic_validation_test.cpp | Subject and grade initialization, constraints and academic data validation | PASS |
+| TC-SQL | sqlite_test.cpp | In-memory SQLite connection, table creation, insertion and retrieval | PASS |
+| TC-PERF | performance_test.cpp | Student listing, student search and attendance summary benchmarks | PASS |
 
-All five standalone C++ test programs also compiled successfully together using the strict compiler flags.
+### 2.1 RBAC Testing
 
-## 3. Performance Benchmark Results
+Verified:
+- Correct permission checks for four roles.
+- Case-insensitive role name handling.
+- Unknown roles are denied all permissions.
 
-Test dataset:
+Result: All RBAC tests passed.
 
-- Students: 5,000
-- Subjects: 10
-- Attendance records: 250,000
-- Warm-up runs: 5
-- Measured runs: 100
+### 2.2 Audit Testing
+
+Verified:
+- Audit table initialization.
+- Audit event insertion.
+- Five-year audit log retention.
+
+Result: All audit tests passed.
+
+### 2.3 Academic Database Validation
+
+Verified:
+- Subject table initialization.
+- Repeated subject table initialization.
+- Existence of credits and semester columns.
+- Student table creation.
+- Grade table initialization.
+- Insertion of test students and subjects.
+- Rejection of duplicate subject codes.
+- Acceptance of minimum marks (0).
+- Acceptance of maximum marks (100).
+- Rejection of negative marks.
+- Rejection of marks above 100.
+- Rejection of duplicate student-subject grades.
+- Rejection of grades for nonexistent students.
+- Rejection of grades for nonexistent subjects.
+
+Result: All academic database validation tests passed.
+
+### 2.4 SQLite Testing
+
+Verified:
+- Successful in-memory SQLite connection.
+- Students table creation.
+- Student record insertion.
+- Student record retrieval.
+
+Result: All SQLite tests passed.
+
+## 3. Performance Testing Results
+
+Performance testing was conducted using a synthetic dataset.
+
+### Test Dataset
+
+| Parameter | Value |
+|---|---:|
+| Students | 5,000 |
+| Subjects | 10 |
+| Attendance records | 250,000 |
+| Warm-up runs | 5 |
+| Measured runs | 100 |
+
+### Benchmark Results
 
 | Operation | Average (ms) | Median (ms) | P95 (ms) |
 |---|---:|---:|---:|
@@ -40,38 +98,107 @@ Test dataset:
 
 Performance acceptance target: P95 below 3000 ms.
 
-Result: All three measured operations met the specified benchmark target.
+Result: All three benchmark operations met the specified P95 target.
 
-Note: These measurements represent SQLite query execution times, not full application response times.
+Note: These measurements represent SQLite query execution times, not complete application response times.
 
-## 4. Application Acceptance Testing
+## 4. System and Acceptance Testing
 
-The following scripts are configured in the GitHub Actions workflow:
+The following application acceptance test scripts are integrated into the GitHub Actions workflow:
 
-- verify_attendance.sh
-- verify_reports.sh
+### 4.1 Attendance Acceptance Testing
 
-Their results must be recorded from the latest successful GitHub Actions execution. Previous workflow inclusion does not by itself establish the result of the updated workflow.
+Test script: `verify_attendance.sh`
 
-## 5. Code Coverage
+The workflow executes the attendance acceptance tests against the compiled application.
 
-A separate GitHub Actions coverage job has been configured using GCC coverage instrumentation and GCOVR.
+### 4.2 Academic Reports Acceptance Testing
 
-Initial coverage scope:
+Test script: `verify_reports.sh`
 
-- src/audit.cpp
-- src/subjects.cpp
-- src/grades.cpp
+The workflow executes the academic reports acceptance tests against the compiled application.
 
-The coverage report is generated as coverage.xml and uploaded as a GitHub Actions artifact.
+Result: Both acceptance test steps are included in the CI pipeline. Their execution status is verified through successful GitHub Actions runs.
 
-Coverage percentage: Pending GitHub Actions execution.
+## 5. Automated Testing Through CI
 
-## 6. Overall Result
+The testing workflow is integrated into GitHub Actions.
 
-- Five standalone C++ tests: Successfully compiled and executed locally.
-- Performance benchmark: All three measured queries met the P95 target.
-- Attendance and reports acceptance tests: Configured in CI; latest execution pending.
-- Code coverage: Configured; report pending CI execution.
+### Automated CI Activities
 
-Testing is not declared fully complete until the updated GitHub Actions workflow succeeds and the coverage artifact is generated.
+1. Checkout the repository.
+2. Install required compiler and SQLite dependencies.
+3. Compile the Student Record System application.
+4. Compile five standalone C++ test programs.
+5. Execute the standalone test programs.
+6. Execute attendance acceptance tests.
+7. Execute academic reports acceptance tests.
+8. Build and execute coverage-instrumented tests.
+9. Generate the code coverage report.
+10. Upload the coverage report as a workflow artifact.
+
+### CI Verification
+
+The updated GitHub Actions workflow completed successfully after Pull Request #31 was merged into the main branch.
+
+The Code Coverage (Ubuntu) job also completed successfully, including coverage report generation and artifact upload.
+
+Result: CI workflow execution successful.
+
+## 6. Code Coverage Results
+
+Code coverage was measured using GCC coverage instrumentation and GCOVR.
+
+### 6.1 Overall Coverage
+
+| Metric | Covered | Total | Coverage |
+|---|---:|---:|---:|
+| Line coverage | 49 | 251 | 19.52% |
+| Branch coverage | 40 | 610 | 6.56% |
+
+### 6.2 Module-wise Coverage
+
+| Source File | Line Coverage | Branch Coverage |
+|---|---:|---:|
+| src/audit.cpp | 89.47% | 50.00% |
+| src/subjects.cpp | 16.78% | 6.96% |
+| src/grades.cpp | 8.99% | 1.96% |
+
+### 6.3 Coverage Interpretation
+
+- The audit module achieved 89.47% line coverage.
+- The subjects module achieved 16.78% line coverage.
+- The grades module achieved 8.99% line coverage.
+
+The coverage report currently includes only the audit, subjects and grades source modules exercised by the coverage tests.
+
+It does not represent whole-project code coverage.
+
+The coverage report was successfully generated as `coverage.xml` and uploaded as a GitHub Actions artifact.
+
+## 7. Overall Testing Summary
+
+| Testing Activity | Status |
+|---|---|
+| RBAC unit testing | PASS |
+| Audit unit testing | PASS |
+| Academic database validation | PASS |
+| SQLite testing | PASS |
+| Performance benchmarking | PASS |
+| Attendance acceptance testing in CI | PASS |
+| Academic reports acceptance testing in CI | PASS |
+| Automated C++ test execution | PASS |
+| Code coverage report generation | PASS |
+| Coverage artifact upload | PASS |
+
+## 8. Conclusion
+
+The Student Record System underwent unit testing, integration testing, application acceptance testing and performance benchmarking.
+
+Five standalone C++ test programs were successfully compiled and executed. The attendance and academic reports acceptance scripts were integrated into the CI pipeline.
+
+GCC and GCOVR were used to generate a code coverage report for the audit, subjects and grades modules.
+
+The updated GitHub Actions workflow completed successfully, and the coverage report was generated and uploaded.
+
+The testing implementation and documentation were merged into the main branch through Pull Request #31.
