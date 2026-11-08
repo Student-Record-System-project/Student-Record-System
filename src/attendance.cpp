@@ -1,5 +1,6 @@
 #include "attendance.h"
 
+#include "audit.h"
 #include <iostream>
 #include <string>
 #include <iomanip>
@@ -119,7 +120,7 @@ double calculateAttendancePercentage(sqlite3* db, const std::string& studentId, 
     return calculateAttendancePercentage(db, studentId, subjectId, nullptr);
 }
 
-void recordAttendance(sqlite3* db) {
+void recordAttendance(sqlite3* db, const std::string& actor) {
     cout << "\n--- Record Attendance ---\n";
     cout << "Student ID: ";
     string studentId;
@@ -207,6 +208,11 @@ void recordAttendance(sqlite3* db) {
 
     rc = sqlite3_step(stmt);
     if (rc == SQLITE_DONE) {
+        if (!logAuditEvent(db, actor, "ATTENDANCE_RECORDED",
+                            studentId + "/" + std::to_string(subjectId) + "/" + dateStr,
+                            "Status: " + normStatus)) {
+            cerr << "Warning: attendance audit event failed.\n";
+        }
         cout << "Attendance recorded successfully.\n";
     } else {
         cout << "Error: could not record attendance. An attendance record for this student, subject, and date may already exist.\n"
@@ -215,7 +221,7 @@ void recordAttendance(sqlite3* db) {
     sqlite3_finalize(stmt);
 }
 
-void updateAttendance(sqlite3* db) {
+void updateAttendance(sqlite3* db, const std::string& actor) {
     cout << "\n--- Update Attendance ---\n";
     cout << "Student ID: ";
     string studentId;
@@ -298,6 +304,11 @@ void updateAttendance(sqlite3* db) {
     sqlite3_finalize(stmt);
 
     if (rc == SQLITE_DONE && sqlite3_changes(db) > 0) {
+        if (!logAuditEvent(db, actor, "ATTENDANCE_UPDATED",
+                            studentId + "/" + std::to_string(subjectId) + "/" + dateStr,
+                            "New status: " + normStatus)) {
+            cerr << "Warning: attendance update audit event failed.\n";
+        }
         cout << "Attendance updated successfully.\n";
     } else {
         cout << "Error: could not update attendance.\n"

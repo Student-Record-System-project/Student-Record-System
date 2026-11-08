@@ -9,8 +9,8 @@
 constexpr bool kLateCountsAsPresent = false;
 
 bool initializeAttendance(sqlite3* db);
-void recordAttendance(sqlite3* db);
-void updateAttendance(sqlite3* db);
+void recordAttendance(sqlite3* db, const std::string& actor = "SYSTEM");
+void updateAttendance(sqlite3* db, const std::string& actor = "SYSTEM");
 void viewAttendance(sqlite3* db, const std::string& username, const std::string& role);
 void viewAttendance(sqlite3* db);
 
