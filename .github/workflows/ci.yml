@@ -227,6 +227,7 @@ jobs:
           retention-days: 30
 
   # Code coverage
+
   coverage:
     name: Code Coverage (Ubuntu)
     runs-on: ubuntu-latest
@@ -240,22 +241,25 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++ libsqlite3-dev sqlite3 gcovr
 
-      - name: Build audit coverage test
+      - name: Build coverage-instrumented application
         run: |
-          mkdir -p build/coverage/audit
-          cd build/coverage/audit
+          g++ -std=c++17 -O0 -g --coverage \
+              -Iinclude -Isrc \
+              $(find src -name '*.cpp') \
+              -lsqlite3 -o student_system
 
+      - name: Build standalone coverage tests
+        run: |
+          mkdir -p build/coverage/audit build/coverage/academic build/coverage/gpa build/coverage/auth
+
+          cd build/coverage/audit
           g++ -std=c++17 -O0 -g --coverage \
               -I../../../include -I../../../src \
               ../../../tests/audit_test.cpp \
               ../../../src/audit.cpp \
               -lsqlite3 -o audit_test
 
-      - name: Build academic validation coverage test
-        run: |
-          mkdir -p build/coverage/academic
-          cd build/coverage/academic
-
+          cd ../academic
           g++ -std=c++17 -O0 -g --coverage \
               -I../../../include -I../../../src \
               ../../../tests/academic_validation_test.cpp \
@@ -264,22 +268,14 @@ jobs:
               ../../../src/audit.cpp \
               -lsqlite3 -o academic_validation_test
 
-      - name: Build GPA coverage test
-        run: |
-          mkdir -p build/coverage/gpa
-          cd build/coverage/gpa
-
+          cd ../gpa
           g++ -std=c++17 -O0 -g --coverage \
               -I../../../include -I../../../src \
               ../../../tests/gpa_test.cpp \
               ../../../src/gpa.cpp \
               -lsqlite3 -o gpa_test
 
-      - name: Build authentication coverage test
-        run: |
-          mkdir -p build/coverage/auth
-          cd build/coverage/auth
-
+          cd ../auth
           g++ -std=c++17 -O0 -g --coverage -DAUTH_TESTING \
               -I../../../include -I../../../src \
               ../../../tests/auth_test.cpp \
@@ -288,21 +284,22 @@ jobs:
               ../../../src/audit.cpp \
               -lsqlite3 -o auth_test
 
-      - name: Run audit coverage test
-        working-directory: build/coverage/audit
-        run: ./audit_test
+      - name: Run standalone coverage tests
+        run: |
+          (cd build/coverage/audit && ./audit_test)
+          (cd build/coverage/academic && ./academic_validation_test)
+          (cd build/coverage/gpa && ./gpa_test)
+          (cd build/coverage/auth && ./auth_test)
 
-      - name: Run academic validation coverage test
-        working-directory: build/coverage/academic
-        run: ./academic_validation_test
+      - name: Run attendance acceptance coverage
+        run: |
+          chmod +x verify_attendance.sh
+          ./verify_attendance.sh
 
-      - name: Run GPA coverage test
-        working-directory: build/coverage/gpa
-        run: ./gpa_test
-
-      - name: Run authentication coverage test
-        working-directory: build/coverage/auth
-        run: ./auth_test
+      - name: Run reports acceptance coverage
+        run: |
+          chmod +x verify_reports.sh
+          ./verify_reports.sh
 
       - name: Generate coverage report
         run: |
