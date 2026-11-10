@@ -72,6 +72,10 @@ jobs:
               tests/gpa_test.cpp src/gpa.cpp \
               -lsqlite3 -o build/tests/gpa_test
 
+          g++ -std=c++17 -Wall -Wextra -Werror -DAUTH_TESTING -Iinclude -Isrc \
+              tests/auth_test.cpp src/auth.cpp src/password_hash.cpp src/audit.cpp \
+              -lsqlite3 -o build/tests/auth_test
+
       - name: Run standalone C++ tests
         run: |
           set -e
@@ -81,6 +85,7 @@ jobs:
           ./build/tests/performance_test
           ./build/tests/sqlite_test
           ./build/tests/gpa_test
+          ./build/tests/auth_test
 
       - name: Upload compiled binary
         uses: actions/upload-artifact@v4
@@ -158,6 +163,10 @@ jobs:
               tests/gpa_test.cpp src/gpa.cpp \
               -lsqlite3 -o build/tests/gpa_test.exe
 
+          g++ -std=c++17 -Wall -Wextra -Werror -DAUTH_TESTING -Iinclude -Isrc \
+              tests/auth_test.cpp src/auth.cpp src/password_hash.cpp src/audit.cpp \
+              -lsqlite3 -lbcrypt -o build/tests/auth_test.exe
+
       - name: Run standalone C++ tests
         run: |
           set -e
@@ -167,6 +176,7 @@ jobs:
           ./build/tests/performance_test.exe
           ./build/tests/sqlite_test.exe
           ./build/tests/gpa_test.exe
+          ./build/tests/auth_test.exe
 
       - name: Inspect Windows runtime dependencies
         run: |
@@ -265,6 +275,19 @@ jobs:
               ../../../src/gpa.cpp \
               -lsqlite3 -o gpa_test
 
+      - name: Build authentication coverage test
+        run: |
+          mkdir -p build/coverage/auth
+          cd build/coverage/auth
+
+          g++ -std=c++17 -O0 -g --coverage -DAUTH_TESTING \
+              -I../../../include -I../../../src \
+              ../../../tests/auth_test.cpp \
+              ../../../src/auth.cpp \
+              ../../../src/password_hash.cpp \
+              ../../../src/audit.cpp \
+              -lsqlite3 -o auth_test
+
       - name: Run audit coverage test
         working-directory: build/coverage/audit
         run: ./audit_test
@@ -276,6 +299,10 @@ jobs:
       - name: Run GPA coverage test
         working-directory: build/coverage/gpa
         run: ./gpa_test
+
+      - name: Run authentication coverage test
+        working-directory: build/coverage/auth
+        run: ./auth_test
 
       - name: Generate coverage report
         run: |
