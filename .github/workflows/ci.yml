@@ -227,8 +227,6 @@ jobs:
           retention-days: 30
 
   # Code coverage
-
-  
   coverage:
     name: Code Coverage (Ubuntu)
     runs-on: ubuntu-latest
@@ -310,6 +308,7 @@ jobs:
             --filter "$GITHUB_WORKSPACE/src/" \
             --exclude "$GITHUB_WORKSPACE/src/main.cpp" \
             --merge-mode-functions=merge-use-line-0 \
+            --gcov-ignore-parse-errors=suspicious_hits.warn \
             --xml-pretty \
             --output "$GITHUB_WORKSPACE/coverage.xml"
 
