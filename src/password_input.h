@@ -5,6 +5,17 @@
 #include <iostream>
 #include <string>
 
+#ifdef AUTH_TESTING
+
+// Test mode: read passwords from redirected std::cin.
+inline std::string readHiddenPassword() {
+    std::string password;
+    std::getline(std::cin, password);
+    return password;
+}
+
+#else
+
 #ifdef _WIN32
 #include <conio.h>
 #include <cstdio>
@@ -22,14 +33,11 @@ inline std::string readHiddenPassword() {
 
 #ifdef _WIN32
 
-    // If stdin is redirected (for example, in CI tests),
-    // read the password from the input stream instead of _getch().
     if (!_isatty(_fileno(stdin))) {
         std::getline(std::cin, password);
         return password;
     }
 
-    // Interactive Windows terminal: hide password characters.
     while ((ch = static_cast<char>(_getch())) != '\r') {
         if (ch == '\b') {
             if (!password.empty()) {
@@ -44,7 +52,6 @@ inline std::string readHiddenPassword() {
 
 #else
 
-    // If terminal settings cannot be accessed, use normal input.
     termios oldSettings{}, newSettings{};
 
     if (tcgetattr(STDIN_FILENO, &oldSettings) != 0) {
@@ -52,7 +59,6 @@ inline std::string readHiddenPassword() {
         return password;
     }
 
-    // Disable terminal echo while reading the password.
     newSettings = oldSettings;
     newSettings.c_lflag &= static_cast<tcflag_t>(~ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &newSettings);
@@ -69,7 +75,6 @@ inline std::string readHiddenPassword() {
         }
     }
 
-    // Restore terminal settings.
     tcsetattr(STDIN_FILENO, TCSANOW, &oldSettings);
 
 #endif
@@ -78,4 +83,5 @@ inline std::string readHiddenPassword() {
     return password;
 }
 
+#endif
 #endif
