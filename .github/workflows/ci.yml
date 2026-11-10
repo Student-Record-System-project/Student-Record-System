@@ -3,7 +3,7 @@ name: CI
 
 on:
   push:
-    branches: [main, 'feat/**']
+    branches: [main, 'feat/**', 'docs/**']
   pull_request:
     branches: [main]
 
@@ -68,6 +68,10 @@ jobs:
               tests/sqlite_test.cpp \
               -lsqlite3 -o build/tests/sqlite_test
 
+          g++ -std=c++17 -Wall -Wextra -Werror -Iinclude -Isrc \
+              tests/gpa_test.cpp src/gpa.cpp \
+              -lsqlite3 -o build/tests/gpa_test
+
       - name: Run standalone C++ tests
         run: |
           set -e
@@ -76,6 +80,7 @@ jobs:
           ./build/tests/academic_validation_test
           ./build/tests/performance_test
           ./build/tests/sqlite_test
+          ./build/tests/gpa_test
 
       - name: Upload compiled binary
         uses: actions/upload-artifact@v4
@@ -149,6 +154,10 @@ jobs:
               tests/sqlite_test.cpp \
               -lsqlite3 -o build/tests/sqlite_test.exe
 
+          g++ -std=c++17 -Wall -Wextra -Werror -Iinclude -Isrc \
+              tests/gpa_test.cpp src/gpa.cpp \
+              -lsqlite3 -o build/tests/gpa_test.exe
+
       - name: Run standalone C++ tests
         run: |
           set -e
@@ -157,6 +166,7 @@ jobs:
           ./build/tests/academic_validation_test.exe
           ./build/tests/performance_test.exe
           ./build/tests/sqlite_test.exe
+          ./build/tests/gpa_test.exe
 
       - name: Inspect Windows runtime dependencies
         run: |
@@ -205,6 +215,8 @@ jobs:
           name: StudentRecordSystem-Windows
           path: StudentRecordSystem-Windows.zip
           retention-days: 30
+
+  # Code coverage
   coverage:
     name: Code Coverage (Ubuntu)
     runs-on: ubuntu-latest
@@ -221,7 +233,6 @@ jobs:
       - name: Build audit coverage test
         run: |
           mkdir -p build/coverage/audit
-
           cd build/coverage/audit
 
           g++ -std=c++17 -O0 -g --coverage \
@@ -233,7 +244,6 @@ jobs:
       - name: Build academic validation coverage test
         run: |
           mkdir -p build/coverage/academic
-
           cd build/coverage/academic
 
           g++ -std=c++17 -O0 -g --coverage \
@@ -244,6 +254,17 @@ jobs:
               ../../../src/audit.cpp \
               -lsqlite3 -o academic_validation_test
 
+      - name: Build GPA coverage test
+        run: |
+          mkdir -p build/coverage/gpa
+          cd build/coverage/gpa
+
+          g++ -std=c++17 -O0 -g --coverage \
+              -I../../../include -I../../../src \
+              ../../../tests/gpa_test.cpp \
+              ../../../src/gpa.cpp \
+              -lsqlite3 -o gpa_test
+
       - name: Run audit coverage test
         working-directory: build/coverage/audit
         run: ./audit_test
@@ -251,6 +272,10 @@ jobs:
       - name: Run academic validation coverage test
         working-directory: build/coverage/academic
         run: ./academic_validation_test
+
+      - name: Run GPA coverage test
+        working-directory: build/coverage/gpa
+        run: ./gpa_test
 
       - name: Generate coverage report
         run: |
