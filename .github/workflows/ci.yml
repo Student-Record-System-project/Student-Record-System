@@ -302,16 +302,18 @@ jobs:
           ./verify_reports.sh
 
      
+    
       - name: Generate coverage report
         run: |
-          python -m pip install gcovr
+          python -m pip install --upgrade gcovr
           gcovr \
-            --root . \
-            --filter 'src/' \
-            --exclude 'src/main.cpp' \
-            --gcov-ignore-errors=no_working_dir_found \
+            --root "$GITHUB_WORKSPACE" \
+            --filter "$GITHUB_WORKSPACE/src/" \
+            --exclude "$GITHUB_WORKSPACE/src/main.cpp" \
+            --gcov-ignore-errors=all \
             --xml-pretty \
-            --output coverage.xml
+            --output "$GITHUB_WORKSPACE/coverage.xml"
+
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
