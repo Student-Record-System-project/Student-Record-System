@@ -301,14 +301,15 @@ jobs:
           chmod +x verify_reports.sh
           ./verify_reports.sh
 
+     
       - name: Generate coverage report
         run: |
+          python -m pip install gcovr
           gcovr \
             --root . \
             --filter 'src/' \
             --exclude 'src/main.cpp' \
-            --exclude-unreachable-branches \
-            --print-summary \
+            --gcov-ignore-errors=no_working_dir_found \
             --xml-pretty \
             --output coverage.xml
 
