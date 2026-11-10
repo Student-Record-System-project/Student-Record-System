@@ -3,7 +3,7 @@ name: CI
 
 on:
   push:
-    branches: [main, 'feat/**']
+    branches: [main, 'feat/**', 'docs/**']
   pull_request:
     branches: [main]
 
@@ -68,6 +68,14 @@ jobs:
               tests/sqlite_test.cpp \
               -lsqlite3 -o build/tests/sqlite_test
 
+          g++ -std=c++17 -Wall -Wextra -Werror -Iinclude -Isrc \
+              tests/gpa_test.cpp src/gpa.cpp \
+              -lsqlite3 -o build/tests/gpa_test
+
+          g++ -std=c++17 -Wall -Wextra -Werror -DAUTH_TESTING -Iinclude -Isrc \
+              tests/auth_test.cpp src/auth.cpp src/password_hash.cpp src/audit.cpp \
+              -lsqlite3 -o build/tests/auth_test
+
       - name: Run standalone C++ tests
         run: |
           set -e
@@ -76,6 +84,8 @@ jobs:
           ./build/tests/academic_validation_test
           ./build/tests/performance_test
           ./build/tests/sqlite_test
+          ./build/tests/gpa_test
+          ./build/tests/auth_test
 
       - name: Upload compiled binary
         uses: actions/upload-artifact@v4
@@ -149,6 +159,14 @@ jobs:
               tests/sqlite_test.cpp \
               -lsqlite3 -o build/tests/sqlite_test.exe
 
+          g++ -std=c++17 -Wall -Wextra -Werror -Iinclude -Isrc \
+              tests/gpa_test.cpp src/gpa.cpp \
+              -lsqlite3 -o build/tests/gpa_test.exe
+
+          g++ -std=c++17 -Wall -Wextra -Werror -DAUTH_TESTING -Iinclude -Isrc \
+              tests/auth_test.cpp src/auth.cpp src/password_hash.cpp src/audit.cpp \
+              -lsqlite3 -lbcrypt -o build/tests/auth_test.exe
+
       - name: Run standalone C++ tests
         run: |
           set -e
@@ -157,6 +175,8 @@ jobs:
           ./build/tests/academic_validation_test.exe
           ./build/tests/performance_test.exe
           ./build/tests/sqlite_test.exe
+          ./build/tests/gpa_test.exe
+          ./build/tests/auth_test.exe
 
       - name: Inspect Windows runtime dependencies
         run: |
@@ -205,6 +225,8 @@ jobs:
           name: StudentRecordSystem-Windows
           path: StudentRecordSystem-Windows.zip
           retention-days: 30
+
+  # Code coverage
   coverage:
     name: Code Coverage (Ubuntu)
     runs-on: ubuntu-latest
@@ -218,25 +240,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++ libsqlite3-dev sqlite3 gcovr
 
-      - name: Build audit coverage test
+      - name: Build coverage-instrumented application
         run: |
-          mkdir -p build/coverage/audit
+          g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
+              -Iinclude -Isrc \
+              $(find src -name '*.cpp') \
+              -lsqlite3 -o student_system
+
+      - name: Build standalone coverage tests
+        run: |
+          mkdir -p build/coverage/audit build/coverage/academic build/coverage/gpa build/coverage/auth
 
           cd build/coverage/audit
-
-          g++ -std=c++17 -O0 -g --coverage \
+          g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
               -I../../../include -I../../../src \
               ../../../tests/audit_test.cpp \
               ../../../src/audit.cpp \
               -lsqlite3 -o audit_test
 
-      - name: Build academic validation coverage test
-        run: |
-          mkdir -p build/coverage/academic
-
-          cd build/coverage/academic
-
-          g++ -std=c++17 -O0 -g --coverage \
+          cd ../academic
+          g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
               -I../../../include -I../../../src \
               ../../../tests/academic_validation_test.cpp \
               ../../../src/subjects.cpp \
@@ -244,24 +267,50 @@ jobs:
               ../../../src/audit.cpp \
               -lsqlite3 -o academic_validation_test
 
-      - name: Run audit coverage test
-        working-directory: build/coverage/audit
-        run: ./audit_test
+          cd ../gpa
+          g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
+              -I../../../include -I../../../src \
+              ../../../tests/gpa_test.cpp \
+              ../../../src/gpa.cpp \
+              -lsqlite3 -o gpa_test
 
-      - name: Run academic validation coverage test
-        working-directory: build/coverage/academic
-        run: ./academic_validation_test
+          cd ../auth
+          g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path -DAUTH_TESTING \
+              -I../../../include -I../../../src \
+              ../../../tests/auth_test.cpp \
+              ../../../src/auth.cpp \
+              ../../../src/password_hash.cpp \
+              ../../../src/audit.cpp \
+              -lsqlite3 -o auth_test
+
+      - name: Run standalone coverage tests
+        run: |
+          (cd build/coverage/audit && ./audit_test)
+          (cd build/coverage/academic && ./academic_validation_test)
+          (cd build/coverage/gpa && ./gpa_test)
+          (cd build/coverage/auth && ./auth_test)
+
+      - name: Run attendance acceptance coverage
+        run: |
+          chmod +x verify_attendance.sh
+          ./verify_attendance.sh
+
+      - name: Run reports acceptance coverage
+        run: |
+          chmod +x verify_reports.sh
+          ./verify_reports.sh
 
       - name: Generate coverage report
         run: |
+          python -m pip install --upgrade gcovr
           gcovr \
-            --root . \
-            --filter 'src/' \
-            --exclude 'src/main.cpp' \
-            --exclude-unreachable-branches \
-            --print-summary \
+            --root "$GITHUB_WORKSPACE" \
+            --filter "$GITHUB_WORKSPACE/src/" \
+            --exclude "$GITHUB_WORKSPACE/src/main.cpp" \
+            --merge-mode-functions=merge-use-line-0 \
+            --gcov-ignore-parse-errors=suspicious_hits.warn \
             --xml-pretty \
-            --output coverage.xml
+            --output "$GITHUB_WORKSPACE/coverage.xml"
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
