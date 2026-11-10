@@ -228,6 +228,7 @@ jobs:
 
   # Code coverage
 
+  
   coverage:
     name: Code Coverage (Ubuntu)
     runs-on: ubuntu-latest
@@ -243,7 +244,7 @@ jobs:
 
       - name: Build coverage-instrumented application
         run: |
-          g++ -std=c++17 -O0 -g --coverage \
+          g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
               -Iinclude -Isrc \
               $(find src -name '*.cpp') \
               -lsqlite3 -o student_system
@@ -253,14 +254,14 @@ jobs:
           mkdir -p build/coverage/audit build/coverage/academic build/coverage/gpa build/coverage/auth
 
           cd build/coverage/audit
-          g++ -std=c++17 -O0 -g --coverage \
+          g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
               -I../../../include -I../../../src \
               ../../../tests/audit_test.cpp \
               ../../../src/audit.cpp \
               -lsqlite3 -o audit_test
 
           cd ../academic
-          g++ -std=c++17 -O0 -g --coverage \
+          g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
               -I../../../include -I../../../src \
               ../../../tests/academic_validation_test.cpp \
               ../../../src/subjects.cpp \
@@ -269,14 +270,14 @@ jobs:
               -lsqlite3 -o academic_validation_test
 
           cd ../gpa
-          g++ -std=c++17 -O0 -g --coverage \
+          g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
               -I../../../include -I../../../src \
               ../../../tests/gpa_test.cpp \
               ../../../src/gpa.cpp \
               -lsqlite3 -o gpa_test
 
           cd ../auth
-          g++ -std=c++17 -O0 -g --coverage -DAUTH_TESTING \
+          g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path -DAUTH_TESTING \
               -I../../../include -I../../../src \
               ../../../tests/auth_test.cpp \
               ../../../src/auth.cpp \
@@ -301,8 +302,6 @@ jobs:
           chmod +x verify_reports.sh
           ./verify_reports.sh
 
-     
-    
       - name: Generate coverage report
         run: |
           python -m pip install --upgrade gcovr
@@ -310,10 +309,9 @@ jobs:
             --root "$GITHUB_WORKSPACE" \
             --filter "$GITHUB_WORKSPACE/src/" \
             --exclude "$GITHUB_WORKSPACE/src/main.cpp" \
-            --gcov-ignore-errors=all \
+            --merge-mode-functions=merge-use-line-0 \
             --xml-pretty \
             --output "$GITHUB_WORKSPACE/coverage.xml"
-
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
