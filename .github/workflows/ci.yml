@@ -227,94 +227,108 @@ jobs:
           retention-days: 30
 
   # Code coverage
-  coverage:
-    name: Code Coverage (Ubuntu)
-    runs-on: ubuntu-latest
+ 
+coverage:
+  name: Code Coverage (Ubuntu)
+  runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y g++ libsqlite3-dev sqlite3 gcovr
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y g++ libsqlite3-dev sqlite3 gcovr
 
-      - name: Build coverage-instrumented application
-        run: |
-          g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
-              -Iinclude -Isrc \
-              $(find src -name '*.cpp') \
-              -lsqlite3 -o student_system
+    - name: Build coverage-instrumented application
+      run: |
+        g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
+            -Iinclude -Isrc \
+            $(find src -name '*.cpp') \
+            -lsqlite3 -o student_system
 
-      - name: Build standalone coverage tests
-        run: |
-          mkdir -p build/coverage/audit build/coverage/academic build/coverage/gpa build/coverage/auth
+    - name: Build standalone coverage tests
+      run: |
+        mkdir -p build/coverage/audit
+        mkdir -p build/coverage/academic
+        mkdir -p build/coverage/gpa
+        mkdir -p build/coverage/auth
+        mkdir -p build/coverage/attendance
 
-          cd build/coverage/audit
-          g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
-              -I../../../include -I../../../src \
-              ../../../tests/audit_test.cpp \
-              ../../../src/audit.cpp \
-              -lsqlite3 -o audit_test
+        cd build/coverage/audit
+        g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
+            -I../../../include -I../../../src \
+            ../../../tests/audit_test.cpp \
+            ../../../src/audit.cpp \
+            -lsqlite3 -o audit_test
 
-          cd ../academic
-          g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
-              -I../../../include -I../../../src \
-              ../../../tests/academic_validation_test.cpp \
-              ../../../src/subjects.cpp \
-              ../../../src/grades.cpp \
-              ../../../src/audit.cpp \
-              -lsqlite3 -o academic_validation_test
+        cd ../academic
+        g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
+            -I../../../include -I../../../src \
+            ../../../tests/academic_validation_test.cpp \
+            ../../../src/subjects.cpp \
+            ../../../src/grades.cpp \
+            ../../../src/audit.cpp \
+            -lsqlite3 -o academic_validation_test
 
-          cd ../gpa
-          g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
-              -I../../../include -I../../../src \
-              ../../../tests/gpa_test.cpp \
-              ../../../src/gpa.cpp \
-              -lsqlite3 -o gpa_test
+        cd ../gpa
+        g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
+            -I../../../include -I../../../src \
+            ../../../tests/gpa_test.cpp \
+            ../../../src/gpa.cpp \
+            -lsqlite3 -o gpa_test
 
-          cd ../auth
-          g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path -DAUTH_TESTING \
-              -I../../../include -I../../../src \
-              ../../../tests/auth_test.cpp \
-              ../../../src/auth.cpp \
-              ../../../src/password_hash.cpp \
-              ../../../src/audit.cpp \
-              -lsqlite3 -o auth_test
+        cd ../auth
+        g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path -DAUTH_TESTING \
+            -I../../../include -I../../../src \
+            ../../../tests/auth_test.cpp \
+            ../../../src/auth.cpp \
+            ../../../src/password_hash.cpp \
+            ../../../src/audit.cpp \
+            -lsqlite3 -o auth_test
 
-      - name: Run standalone coverage tests
-        run: |
-          (cd build/coverage/audit && ./audit_test)
-          (cd build/coverage/academic && ./academic_validation_test)
-          (cd build/coverage/gpa && ./gpa_test)
-          (cd build/coverage/auth && ./auth_test)
+        cd ../attendance
+        g++ -std=c++17 -O0 -g --coverage -fprofile-abs-path \
+            -I../../../include -I../../../src \
+            ../../../tests/attendance_test.cpp \
+            ../../../src/attendance.cpp \
+            ../../../src/audit.cpp \
+            -lsqlite3 -o attendance_test
 
-      - name: Run attendance acceptance coverage
-        run: |
-          chmod +x verify_attendance.sh
-          ./verify_attendance.sh
+    - name: Run standalone coverage tests
+      run: |
+        (cd build/coverage/audit && ./audit_test)
+        (cd build/coverage/academic && ./academic_validation_test)
+        (cd build/coverage/gpa && ./gpa_test)
+        (cd build/coverage/auth && ./auth_test)
+        (cd build/coverage/attendance && ./attendance_test)
 
-      - name: Run reports acceptance coverage
-        run: |
-          chmod +x verify_reports.sh
-          ./verify_reports.sh
+    - name: Run attendance acceptance coverage
+      run: |
+        chmod +x verify_attendance.sh
+        ./verify_attendance.sh
 
-      - name: Generate coverage report
-        run: |
-          python -m pip install --upgrade gcovr
-          gcovr \
-            --root "$GITHUB_WORKSPACE" \
-            --filter "$GITHUB_WORKSPACE/src/" \
-            --exclude "$GITHUB_WORKSPACE/src/main.cpp" \
-            --merge-mode-functions=merge-use-line-0 \
-            --gcov-ignore-parse-errors=suspicious_hits.warn \
-            --xml-pretty \
-            --output "$GITHUB_WORKSPACE/coverage.xml"
+    - name: Run reports acceptance coverage
+      run: |
+        chmod +x verify_reports.sh
+        ./verify_reports.sh
 
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: student-system-coverage
-          path: coverage.xml
-          retention-days: 30
+    - name: Generate coverage report
+      run: |
+        python -m pip install --upgrade gcovr
+        gcovr \
+          --root "$GITHUB_WORKSPACE" \
+          --filter "$GITHUB_WORKSPACE/src/" \
+          --exclude "$GITHUB_WORKSPACE/src/main.cpp" \
+          --merge-mode-functions=merge-use-line-0 \
+          --gcov-ignore-parse-errors=suspicious_hits.warn \
+          --xml-pretty \
+          --output "$GITHUB_WORKSPACE/coverage.xml"
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: student-system-coverage
+        path: coverage.xml
+        retention-days: 30
