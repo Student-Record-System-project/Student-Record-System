@@ -1,3 +1,4 @@
+
 #include "rbac.h"
 
 #include <iostream>
@@ -24,13 +25,9 @@ int main() {
     };
 
     const bool expected[][17] = {
-        // Admin
         {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
-        // Faculty
         {0,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1},
-        // Staff
         {0,1,1,0,0,0,0,0,0,0,0,0,1,0,0,1,1},
-        // Student
         {0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,1,1}
     };
 
@@ -63,7 +60,16 @@ int main() {
         }
     }
 
+    if (!hasPermission(" ADMIN ", Permission::ManageUsers) ||
+        !hasPermission(" Faculty ", Permission::AddGrades) ||
+        hasPermission(" unknown ", Permission::ManageUsers)) {
+        std::cerr << "FAIL: Whitespace role normalization.\n";
+        return 1;
+    }
+
+    std::cout << "PASS: Whitespace role normalization.\n";
     std::cout << "PASS: Unknown roles are denied all permissions.\n";
     std::cout << "All RBAC tests passed.\n";
+
     return 0;
 }

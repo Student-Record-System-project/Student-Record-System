@@ -26,10 +26,14 @@ enum class Permission {
 };
 
 inline std::string normalizeRole(std::string role) {
+    role.erase(0, role.find_first_not_of(" \t\n\r"));
+    role.erase(role.find_last_not_of(" \t\n\r") + 1);
+
     std::transform(role.begin(), role.end(), role.begin(),
         [](unsigned char c) {
             return static_cast<char>(std::tolower(c));
         });
+
     return role;
 }
 
