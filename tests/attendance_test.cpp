@@ -78,6 +78,92 @@ int main() {
     runInput("", [&] { viewAttendance(db, "S001", "student"); });
     runInput("S999\n", [&] { viewAttendance(db, "admin", "admin"); });
 
+
+    // Additional attendance coverage tests
+
+    bool allSubjectsOk = false;
+    double allPercentage =
+        calculateAttendancePercentage(db, "S001", 0, &allSubjectsOk);
+    assert(allSubjectsOk);
+    assert(allPercentage >= 0.0);
+
+    double subjectPercentage =
+        calculateAttendancePercentage(db, "S001", 1);
+    assert(subjectPercentage >= 0.0);
+
+    // Successful student attendance view
+    runInput("\n", [&] {
+        viewAttendance(db, "S001", "student");
+    });
+
+    // Successful admin attendance view with subject filter
+    runInput("S001\n1\n", [&] {
+        viewAttendance(db, "admin", "admin");
+    });
+
+    // No attendance records for another subject
+    runInput("S001\n999\n", [&] {
+        viewAttendance(db, "admin", "admin");
+    });
+
+    // Invalid subject filter
+    runInput("S001\nabc\n", [&] {
+        viewAttendance(db, "admin", "admin");
+    });
+
+    runInput("S001\n0\n", [&] {
+        viewAttendance(db, "admin", "admin");
+    });
+
+    // Test wrapper overload
+    runInput("S001\n\n", [&] {
+        viewAttendance(db);
+    });
+
+    // Empty student ID during attendance recording
+    runInput("\n", [&] {
+        recordAttendance(db, "admin");
+    });
+
+    // Invalid subject ID during recording
+    runInput("S001\nabc\n", [&] {
+        recordAttendance(db, "admin");
+    });
+
+    runInput("S001\n0\n", [&] {
+        recordAttendance(db, "admin");
+    });
+
+    // Invalid date range
+    runInput("S001\n1\n1800-01-01\n", [&] {
+        recordAttendance(db, "admin");
+    });
+
+    // Empty student ID during update
+    runInput("\n", [&] {
+        updateAttendance(db, "admin");
+    });
+
+    // Invalid subject during update
+    runInput("S001\nabc\n", [&] {
+        updateAttendance(db, "admin");
+    });
+
+    runInput("S001\n0\n", [&] {
+        updateAttendance(db, "admin");
+    });
+
+    // Invalid date during update
+    runInput("S001\n1\ninvalid\n", [&] {
+        updateAttendance(db, "admin");
+    });
+
+    // Successful update to Late using case-insensitive status
+    runInput("S001\n1\n2026-11-11\nlate\n", [&] {
+        updateAttendance(db, "admin");
+    });
+
+
     sqlite3_close(db);
     cout << "Attendance tests passed\n";
     return 0;
